@@ -1,0 +1,70 @@
+import 'package:hive/hive.dart';
+
+class SettingsService {
+  static const String _boxName = 'settings_box';
+
+  static Future<void> init() async {
+    if (!Hive.isBoxOpen(_boxName)) {
+      await Hive.openBox(_boxName);
+    }
+  }
+
+  static Box _getBox() => Hive.box(_boxName);
+
+  // ============ MIKROTIK SETTINGS ============
+ static String get mikrotikHost => _getBox().get('mikrotik_host', defaultValue: '') as String;
+  static String get mikrotikUser => _getBox().get('mikrotik_user', defaultValue: '') as String;
+  static String get mikrotikPass => _getBox().get('mikrotik_pass', defaultValue: '') as String;
+  static String get mikrotikPort => _getBox().get('mikrotik_port', defaultValue: '8081') as String;
+  static bool get mikrotikUseSsl => _getBox().get('mikrotik_use_ssl', defaultValue: false) as bool;
+  static String get mikrotikProfile => _getBox().get('mikrotik_profile', defaultValue: 'default') as String;  // ✅ ADD
+
+static bool get mikrotikConnected =>
+    _getBox().get('mikrotik_connected', defaultValue: false) as bool;
+
+
+static Future<void> saveMikrotikConnected(bool value) async {
+  await _getBox().put('mikrotik_connected', value);
+}
+  static Future<void> saveMikrotikSettings({
+    required String host,
+    required String user,
+    required String pass,
+    required String port,
+    required bool useSsl,
+  }) async {
+    final box = _getBox();
+    await box.put('mikrotik_host', host);
+    await box.put('mikrotik_user', user);
+    await box.put('mikrotik_pass', pass);
+    await box.put('mikrotik_port', port);
+    await box.put('mikrotik_use_ssl', useSsl);
+  }
+
+  static Future<void> saveMikrotikProfile(String profile) async {  // ✅ ADD
+    await _getBox().put('mikrotik_profile', profile);
+  }
+
+  // ============ PASSWORD SETTINGS ============
+  static int get passwordLength => _getBox().get('password_length', defaultValue: 8) as int;
+  static String get passwordType => _getBox().get('password_type', defaultValue: 'mix') as String;
+
+  static Future<void> savePasswordSettings({
+    required int length,
+    required String type,
+  }) async {
+    final box = _getBox();
+    await box.put('password_length', length);
+    await box.put('password_type', type);
+  }
+
+  // ============ WHATSAPP SETTINGS ============
+  static String get whatsappMessageTemplate => _getBox().get(
+    'whatsapp_template', 
+    defaultValue: 'Internet Password\n\nName: {name}\nUsername: {username}\nPassword: {password}',
+  ) as String;
+
+  static Future<void> saveWhatsappTemplate(String template) async {
+    await _getBox().put('whatsapp_template', template);
+  }
+}
