@@ -232,29 +232,41 @@
     // ==========================
 
     static String generateRandomPassword(int length, String type) {
-      String chars = '';
-      switch (type) {
-        case 'capital':
-          chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-          break;
-        case 'small':
-          chars = 'abcdefghijkmnpqrstuvwxyz';
-          break;
-        case 'mix':
-          chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-          break;
-        case 'number':
-          chars = '23456789';
-          break;
-        default:
-          chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-      }
-      final random = Random();
-      return List.generate(
-        length,
-        (index) => chars[random.nextInt(chars.length)],
-      ).join();
-    }
+  String chars = '';
+
+  switch (type) {
+    case 'capital':
+      chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+      break;
+    case 'small':
+      chars = 'abcdefghijkmnpqrstuvwxyz';
+      break;
+    case 'mix':
+      chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      break;
+    case 'number':
+      chars = '23456789';
+      break;
+    default:
+      chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  }
+
+  final random = Random();
+
+  final password = List.generate(
+    length,
+    (index) => chars[random.nextInt(chars.length)],
+  ).join();
+
+  // 🔥 PREFIX APPLY HERE (MAIN FIX)
+  final prefix = SettingsService.passwordPrefix;
+
+  if (prefix == 'None') {
+    return password;
+  } else {
+    return prefix + password;
+  }
+}
       // ==========================
   // GET AVAILABLE PASSWORDS (PROFILE-WISE)
   // ==========================

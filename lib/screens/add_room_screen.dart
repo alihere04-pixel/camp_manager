@@ -51,70 +51,100 @@ class _AddRoomScreenState extends State<AddRoomScreen> {
   }
 
   Future<void> _saveRoom() async {
-    if (!_formKey.currentState!.validate()) return;
-    
-    final roomNumber = _roomNumberController.text.trim();
-    if (roomNumber.isEmpty) return;
-    
-    final List<User> users = [];
-    final userBox = HiveDatabase.getUsersBox();
-    final now = DateTime.now();
-    
-    for (var userData in _users) {
-      // ✅ SIRF NAME CHECK (PHONE OPTIONAL)
-      if (userData.nameController.text.trim().isNotEmpty) {
-        
-        final passwordCountText = userData.passwordCountController.text.trim();
-        final passwordCount = int.tryParse(passwordCountText) ?? 1;
-        
-        final amountText = userData.amountController.text.trim();
-        final amount = double.tryParse(amountText) ?? 0.0;
+  if (!_formKey.currentState!.validate()) return;
+  
+  final roomNumber = _roomNumberController.text.trim();
+  if (roomNumber.isEmpty) return;
 
-        final newUser = User(
-          id: DateTime.now().millisecondsSinceEpoch.toString() + users.length.toString(),
-          roomId: '',
-          name: userData.nameController.text.trim(),
-          phoneNumber: userData.phoneController.text.trim(),
-          isPaid: false,
-          passwordCount: passwordCount,
-          amount: amount,
-          createdAt: now,
-          updatedAt: now,
-        );
-        
-        await userBox.put(newUser.id, newUser);
-        users.add(newUser);
-      }
-    }
-    
-    final roomId = DateTime.now().millisecondsSinceEpoch.toString();
-    
-    final room = Room(
-      id: roomId,
-      roomNumber: roomNumber,
-      users: users,
-      isFullyPaid: false,
-      createdAt: now,
-      updatedAt: now,
-      month: widget.currentMonth.month,
-      year: widget.currentMonth.year,
-    );
-    
-    for (var user in users) {
-      final updatedUser = user.copyWith(
-        roomId: roomId,
-        updatedAt: now,
-      );
-      await userBox.put(updatedUser.id, updatedUser);
-    }
-    
-    await HiveDatabase.getRoomsBox().put(room.id, room);
-    
-    if (mounted) {
-      Navigator.pop(context, true);
+  // ✅ SIMPLE DUPLICATE CHECK - SIRF ROOM NUMBER + MONTH
+  final allRooms = HiveDatabase.getRoomsBox().values.toList();
+  
+  bool roomExists = false;
+  for (var room in allRooms) {
+    if (room.roomNumber.trim() == roomNumber && 
+        room.month == widget.currentMonth.month && 
+        room.year == widget.currentMonth.year) {
+      roomExists = true;
+      break;
     }
   }
+  
+  if (roomExists) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('❌ Room $roomNumber already exists!', 
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+    return;
+  }
 
+  // ✅ AGAR ROOM EXISTS NAHI KARTA TOH SAVE KARO
+  final List<User> users = [];
+  final userBox = HiveDatabase.getUsersBox();
+  final now = DateTime.now();
+  
+  for (var userData in _users) {
+    if (userData.nameController.text.trim().isNotEmpty) {
+      final passwordCountText = userData.passwordCountController.text.trim();
+      final passwordCount = int.tryParse(passwordCountText) ?? 1;
+      
+      final amountText = userData.amountController.text.trim();
+      final amount = double.tryParse(amountText) ?? 0.0;
+
+      final newUser = User(
+        id: DateTime.now().millisecondsSinceEpoch.toString() + users.length.toString(),
+        roomId: '',
+        name: userData.nameController.text.trim(),
+        phoneNumber: userData.phoneController.text.trim(),
+        isPaid: false,
+        passwordCount: passwordCount,
+        amount: amount,
+        createdAt: now,
+        updatedAt: now,
+      );
+      
+      await userBox.put(newUser.id, newUser);
+      users.add(newUser);
+    }
+  }
+  
+  final roomId = DateTime.now().millisecondsSinceEpoch.toString();
+  
+  final room = Room(
+    id: roomId,
+    roomNumber: roomNumber,
+    users: users,
+    isFullyPaid: false,
+    createdAt: now,
+    updatedAt: now,
+    month: widget.currentMonth.month,
+    year: widget.currentMonth.year,
+  );
+  
+  for (var user in users) {
+    final updatedUser = user.copyWith(
+      roomId: roomId,
+      updatedAt: now,
+    );
+    await userBox.put(updatedUser.id, updatedUser);
+  }
+  
+  await HiveDatabase.getRoomsBox().put(room.id, room);
+  
+  if (mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('✅ Room $roomNumber created successfully!'),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+    Navigator.pop(context, true);
+  }
+}
   @override
   Widget build(BuildContext context) {
     return Scaffold(

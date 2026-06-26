@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/settings_service.dart';
 import '../services/mikrotik_service.dart';
-import 'password_manager_screen.dart';  // ✅ ADD THIS
+import 'password_manager_screen.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -32,6 +32,9 @@ class _MikrotikSettingsScreenState extends State<MikrotikSettingsScreen> {
   String _selectedProfile = 'default';
   List<String> _profiles = [];
   bool _isLoadingProfiles = false;
+  
+  // ✅ PASSWORD PREFIX (A-Z + None)
+  String _selectedPrefix = 'None';
 
   // ✅ AVAILABLE PASSWORDS VARIABLES
   List<Map<String, dynamic>> _availablePasswords = [];
@@ -47,19 +50,32 @@ class _MikrotikSettingsScreenState extends State<MikrotikSettingsScreen> {
     _passController = TextEditingController(text: SettingsService.mikrotikPass);
     _useSsl = SettingsService.mikrotikUseSsl;
     
-  _selectedLength = SettingsService.passwordLength;
-_selectedType = SettingsService.passwordType;
+    _selectedLength = SettingsService.passwordLength;
+    _selectedPrefix = SettingsService.passwordPrefix;
+    _selectedProfile = SettingsService.mikrotikProfile;
 
-_selectedType = SettingsService.passwordType.toLowerCase();
+    if (!_prefixExists(_selectedPrefix)) {
+      _selectedPrefix = 'None';
+    }
 
-if (!['capital', 'small', 'mix', 'number'].contains(_selectedType)) {
-  _selectedType = 'mix';
-}
+    _selectedType = SettingsService.passwordType.toLowerCase();
+
+    if (!['capital', 'small', 'mix', 'number'].contains(_selectedType)) {
+      _selectedType = 'mix';
+    }
     
     _isConnected = SettingsService.mikrotikConnected;
 
-_loadProfiles();
-_checkSavedConnection();
+    _loadProfiles();
+    _checkSavedConnection();
+  }
+
+  bool _prefixExists(String value) {
+    return value == 'None' ||
+        List.generate(
+          26,
+          (i) => String.fromCharCode(65 + i),
+        ).contains(value);
   }
 
   @override
@@ -72,142 +88,86 @@ _checkSavedConnection();
   }
 
   // ✅ LOAD AVAILABLE PASSWORDS
- Future<void> _loadAvailablePasswords() async {
-
-  setState(() {
-    _isLoadingPasswords = true;
-    _availablePasswords = [];
-  });
-  try {
-
-    final profile =
-        _selectedPasswordProfile == 'all'
-        ? null
-        : _selectedPasswordProfile;
-
-    _availablePasswords =
-        await MikroTikService.getAvailablePasswords(
-          profile: profile,
-        );
-        // ✅ SAVE PASSWORDS FOR OFFLINE USE
-if (_availablePasswords.isNotEmpty) {
-
-  final prefs =
-      await SharedPreferences.getInstance();
-
-  await prefs.setString(
-    'saved_passwords',
-    jsonEncode(_availablePasswords),
-  );
-
- 
-}
-        // agar MikroTik se empty aya to local cache use karo
-if (_availablePasswords.isEmpty) {
-
-  final prefs =
-      await SharedPreferences.getInstance();
-
-  final data =
-      prefs.getString('saved_passwords');
-
-
-  if (data != null && data.isNotEmpty) {
-
-    final List decoded =
-        jsonDecode(data);
-
-
-    _availablePasswords =
-        decoded
-        .map((e) => Map<String,dynamic>.from(e))
-        .toList();
-
-
-   
-  }
-}
-
-  } catch (e) {
-
-
-
-  final prefs =
-      await SharedPreferences.getInstance();
-
-
-  final data =
-      prefs.getString('saved_passwords');
-
-
-  if (data != null && data.isNotEmpty) {
-
-    final List decoded =
-        jsonDecode(data);
-
-
-    _availablePasswords =
-        decoded
-        .map((e) => Map<String,dynamic>.from(e))
-        .toList();
-
-
+  Future<void> _loadAvailablePasswords() async {
+    setState(() {
+      _isLoadingPasswords = true;
+      _availablePasswords = [];
+    });
     
+    try {
+      final profile = _selectedPasswordProfile == 'all' ? null : _selectedPasswordProfile;
 
+      _availablePasswords = await MikroTikService.getAvailablePasswords(
+        profile: profile,
+      );
+      
+      // ✅ SAVE PASSWORDS FOR OFFLINE USE
+      if (_availablePasswords.isNotEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(
+          'saved_passwords',
+          jsonEncode(_availablePasswords),
+        );
+      }
+      
+      // agar MikroTik se empty aya to local cache use karo
+      if (_availablePasswords.isEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        final data = prefs.getString('saved_passwords');
+
+        if (data != null && data.isNotEmpty) {
+          final List decoded = jsonDecode(data);
+          _availablePasswords = decoded
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList();
+        }
+      }
+    } catch (e) {
+      final prefs = await SharedPreferences.getInstance();
+      final data = prefs.getString('saved_passwords');
+
+      if (data != null && data.isNotEmpty) {
+        final List decoded = jsonDecode(data);
+        _availablePasswords = decoded
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+      }
+    }
+    
+    if (!mounted) return;
+    setState(() {
+      _isLoadingPasswords = false;
+    });
   }
-
-}
-  if (!mounted) return;
-
-  setState(() {
-    _isLoadingPasswords = false;
-  });
-
-
-  
-}
-
 
   Future<void> _checkSavedConnection() async {
-  try {
-    final connected =
-        await MikroTikService.checkConnection();
+    try {
+      final connected = await MikroTikService.checkConnection();
 
-    if (!mounted) return;
+      if (!mounted) return;
+      setState(() {
+        _isConnected = connected;
+      });
 
-    setState(() {
-      _isConnected = connected;
-    });
-
-    await SettingsService.saveMikrotikConnected(
-      connected,
-    );
-  } catch (e) {
-    if (!mounted) return;
-
-    setState(() {
-      _isConnected = false;
-    });
-
-    await SettingsService.saveMikrotikConnected(
-      false,
-    );
+      await SettingsService.saveMikrotikConnected(connected);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isConnected = false;
+      });
+      await SettingsService.saveMikrotikConnected(false);
+    }
   }
-}
 
   Future<void> _loadProfiles() async {
     setState(() => _isLoadingProfiles = true);
     _profiles = await MikroTikService.getProfiles();
     
-    
-    
-    
-    
     if (!_profiles.contains('default')) {
       _profiles.insert(0, 'default');
     }
     
-    if (!_profiles.contains(_selectedProfile)) {
+    if (_selectedProfile.isEmpty) {
       _selectedProfile = 'default';
     }
     
@@ -226,23 +186,21 @@ if (_availablePasswords.isEmpty) {
       _isConnected = connected;
     });
 
-   await SettingsService.saveMikrotikConnected(connected);
+    await SettingsService.saveMikrotikConnected(connected);
 
-if (!mounted) return;
-
-ScaffoldMessenger.of(context).showSnackBar(
-  SnackBar(
-    content: Text(connected ? '✅ Connected to MikroTik!' : '❌ Failed to connect'),
-    backgroundColor: connected ? Colors.green : Colors.red,
-  ),
-);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(connected ? '✅ Connected to MikroTik!' : '❌ Failed to connect'),
+        backgroundColor: connected ? Colors.green : Colors.red,
+      ),
+    );
   }
 
   Future<void> _saveSettings() async {
     if (!_formKey.currentState!.validate()) return;
     
     setState(() => _isLoading = true);
-    
     
     await SettingsService.saveMikrotikSettings(
       host: _hostController.text.trim(),
@@ -255,25 +213,23 @@ ScaffoldMessenger.of(context).showSnackBar(
     await SettingsService.savePasswordSettings(
       length: _selectedLength,
       type: _selectedType,
+      prefix: _selectedPrefix,
     );
     
     await SettingsService.saveMikrotikProfile(_selectedProfile);
     
     // ✅ FORCE DISCONNECT (STATUS RESET)
     _isConnected = false;
-await SettingsService.saveMikrotikConnected(false);
+    await SettingsService.saveMikrotikConnected(false);
 
-if (!mounted) return;
+    if (!mounted) return;
+    setState(() => _isLoading = false);
 
-setState(() => _isLoading = false);
-
-ScaffoldMessenger.of(context).showSnackBar(
-  const SnackBar(content: Text('✅ Settings saved! Tap "Check Status" to verify.')),
-);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('✅ Settings saved! Tap "Check Status" to verify.')),
+    );
   }
 
-  // ✅ MARK PASSWORD AS USED (MANUAL)
-  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -311,66 +267,64 @@ ScaffoldMessenger.of(context).showSnackBar(
             
             const SizedBox(height: 16),
 
-            // ✅ AVAILABLE PASSWORDS (CLICKABLE CARD) - SIMPLE
-InkWell(
-  onTap: () async {
-  await Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (context) => const PasswordManagerScreen(),
-    ),
-  );
-
-  // PasswordManagerScreen se wapas aane ke baad
-  // count refresh karo
-  _loadAvailablePasswords();
-},
-  borderRadius: BorderRadius.circular(12),
-  child: Card(
-    color: Colors.indigo[50],
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          const Icon(Icons.password, color: Colors.indigo),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Available Passwords',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.indigo,
+            // ✅ AVAILABLE PASSWORDS (CLICKABLE CARD)
+            InkWell(
+              onTap: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const PasswordManagerScreen(),
+                  ),
+                );
+                _loadAvailablePasswords();
+              },
+              borderRadius: BorderRadius.circular(12),
+              child: Card(
+                color: Colors.indigo[50],
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.password, color: Colors.indigo),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Available Passwords',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.indigo,
+                              ),
+                            ),
+                            if (_isLoadingPasswords)
+                              const Text(
+                                'Loading...',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey,
+                                ),
+                              )
+                            else
+                              Text(
+                                '${_availablePasswords.length} passwords available',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.arrow_forward_ios, color: Colors.indigo, size: 16),
+                    ],
                   ),
                 ),
-                if (_isLoadingPasswords)
-                  const Text(
-                    'Loading...',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey,
-                    ),
-                  )
-                else
-                  Text(
-                    '${_availablePasswords.length} passwords available',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey,
-                    ),
-                  ),
-              ],
+              ),
             ),
-          ),
-          const Icon(Icons.arrow_forward_ios, color: Colors.indigo, size: 16),
-        ],
-      ),
-    ),
-  ),
-),
+            
             const SizedBox(height: 16),
             
             // IP Address
@@ -460,7 +414,9 @@ InkWell(
             const Divider(),
             const SizedBox(height: 16),
             
-            // PASSWORD SETTINGS
+            // ==============================
+            // PASSWORD SETTINGS SECTION
+            // ==============================
             const Text(
               'Password Settings',
               style: TextStyle(
@@ -469,13 +425,62 @@ InkWell(
                 color: Colors.indigo,
               ),
             ),
-            const SizedBox(height: 12),
-
-            // Password Length
-            DropdownButtonFormField<int>(
-              initialValue: _selectedLength,
+            
+            const SizedBox(height: 16),
+            
+            // ✅ PASSWORD PREFIX
+            const Text(
+              'Password Prefix',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 8),
+            
+            DropdownButtonFormField<String>(
+              value: _selectedPrefix,
               decoration: const InputDecoration(
-                labelText: 'Password Length',
+                labelText: 'Prefix (A-Z)',
+                border: OutlineInputBorder(),
+              ),
+              items: [
+                const DropdownMenuItem(
+                  value: 'None',
+                  child: Text('None'),
+                ),
+                ...List.generate(26, (i) {
+                  final letter = String.fromCharCode(65 + i);
+                  return DropdownMenuItem(
+                    value: letter,
+                    child: Text(letter),
+                  );
+                }),
+              ],
+              onChanged: (value) {
+                if (value == null) return;
+                setState(() {
+                  _selectedPrefix = value;
+                });
+              },
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // ✅ PASSWORD LENGTH
+            const Text(
+              'Password Length',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 8),
+            
+            DropdownButtonFormField<int>(
+              value: _selectedLength,
+              decoration: const InputDecoration(
+                labelText: 'Length',
                 border: OutlineInputBorder(),
               ),
               items: const [
@@ -486,19 +491,29 @@ InkWell(
                 DropdownMenuItem(value: 12, child: Text('12')),
               ],
               onChanged: (int? value) {
-  if (value == null) return;
-  setState(() {
-    _selectedLength = value;
-  });
-},
+                if (value == null) return;
+                setState(() {
+                  _selectedLength = value;
+                });
+              },
             ),
-            const SizedBox(height: 12),
-
-            // Character Type
+            
+            const SizedBox(height: 16),
+            
+            // ✅ CHARACTER TYPE
+            const Text(
+              'Character Type',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 8),
+            
             DropdownButtonFormField<String>(
-              initialValue: _selectedType,
+              value: _selectedType,
               decoration: const InputDecoration(
-                labelText: 'Character Type',
+                labelText: 'Type',
                 border: OutlineInputBorder(),
               ),
               items: const [
@@ -508,20 +523,25 @@ InkWell(
                 DropdownMenuItem(value: 'number', child: Text('Number (123)')),
               ],
               onChanged: (String? value) {
-  if (value == null) return;
-  setState(() {
-    _selectedType = value;
-  });
-},
+                if (value == null) return;
+                setState(() {
+                  _selectedType = value;
+                });
+              },
             ),
-            const SizedBox(height: 12),
-
-            // User Profile
+            
+            const SizedBox(height: 16),
+            
+            // ✅ USER PROFILE
             const Text(
-              'User Profile:',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+              'User Profile',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
             ),
             const SizedBox(height: 8),
+            
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               decoration: BoxDecoration(
@@ -557,7 +577,7 @@ InkWell(
             
             const SizedBox(height: 24),
             
-            // ✅ SIRF 2 BUTTONS: SAVE SETTINGS + CHECK STATUS
+            // ✅ BUTTONS
             Row(
               children: [
                 Expanded(
@@ -592,5 +612,4 @@ InkWell(
       ),
     );
   }
-
 }

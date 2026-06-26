@@ -49,14 +49,20 @@ static Future<void> saveMikrotikConnected(bool value) async {
   static int get passwordLength => _getBox().get('password_length', defaultValue: 8) as int;
   static String get passwordType => _getBox().get('password_type', defaultValue: 'mix') as String;
 
+// ✅ Password Prefix (None, A-Z)
+static String get passwordPrefix =>
+    _getBox().get('password_prefix', defaultValue: 'None') as String;
+
   static Future<void> savePasswordSettings({
-    required int length,
-    required String type,
-  }) async {
-    final box = _getBox();
-    await box.put('password_length', length);
-    await box.put('password_type', type);
-  }
+  required int length,
+  required String type,
+  required String prefix,
+}) async {
+  final box = _getBox();
+  await box.put('password_length', length);
+  await box.put('password_type', type);
+  await box.put('password_prefix', prefix);
+}
 
   // ============ WHATSAPP SETTINGS ============
   static String get whatsappMessageTemplate => _getBox().get(
