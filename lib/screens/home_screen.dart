@@ -466,62 +466,82 @@ ScaffoldMessenger.of(context).showSnackBar(
   }
 
   Future<void> _deleteSelectedRooms() async {
-    if (_selectedRoomIds.isEmpty) return;
+  if (_selectedRoomIds.isEmpty) return;
 
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Rooms'),
-        content: Text(
-          'Delete ${_selectedRoomIds.length} room(s)?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.red,
-            ),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm != true) return;
-
-    final usersBox = HiveDatabase.getUsersBox();
-    final roomsBox = HiveDatabase.getRoomsBox();
-
-    final deletedCount = _selectedRoomIds.length;
-
-    for (final roomId in _selectedRoomIds) {
-      final users = usersBox.values
-          .where((u) => u.roomId == roomId)
-          .toList();
-
-      for (final user in users) {
-        await usersBox.delete(user.id);
-      }
-
-      await roomsBox.delete(roomId);
+  // ✅ CHECK: Sirf current month ke rooms delete karo
+  final roomsToDelete = <String>[];
+  final roomsBox = HiveDatabase.getRoomsBox();
+  
+  for (final roomId in _selectedRoomIds) {
+    final room = roomsBox.get(roomId);
+    if (room != null && 
+        room.month == _currentMonth.month && 
+        room.year == _currentMonth.year) {
+      roomsToDelete.add(roomId);
     }
-
-if (!mounted) return;
-    _deselectAllRooms();
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          '$deletedCount room(s) deleted',
-        ),
-      ),
-    );
   }
 
+  if (roomsToDelete.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('No rooms to delete in current month!'),
+        backgroundColor: Colors.orange,
+      ),
+    );
+    return;
+  }
+
+  final confirm = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Delete Rooms'),
+      content: Text(
+        'Delete ${roomsToDelete.length} room(s) from ${_getMonthDisplay()}?',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          style: TextButton.styleFrom(
+            foregroundColor: Colors.red,
+          ),
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Delete'),
+        ),
+      ],
+    ),
+  );
+
+  if (confirm != true) return;
+
+  final usersBox = HiveDatabase.getUsersBox();
+
+  for (final roomId in roomsToDelete) {
+    final users = usersBox.values
+        .where((u) => u.roomId == roomId)
+        .toList();
+
+    for (final user in users) {
+      await usersBox.delete(user.id);
+    }
+
+    await roomsBox.delete(roomId);
+  }
+
+  if (!mounted) return;
+  
+  _selectedRoomIds.clear();
+  _isSelectionMode = false;
+  setState(() {});
+
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text('${roomsToDelete.length} room(s) deleted from ${_getMonthDisplay()}'),
+    ),
+  );
+}
   @override
   Widget build(BuildContext context) {
     return Scaffold(
