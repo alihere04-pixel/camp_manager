@@ -1,41 +1,37 @@
-  import 'dart:convert';
-  import 'dart:math';
-  import 'package:http/http.dart' as http;
-  import 'settings_service.dart';
+import 'dart:convert';
+import 'dart:math';
+import 'package:http/http.dart' as http;
+import 'settings_service.dart';
 
-  class MikroTikService {
+class MikroTikService {
 
-    static String _getAuthHeader() {
-      final user = SettingsService.mikrotikUser;
-      final pass = SettingsService.mikrotikPass;
+  static String _getAuthHeader() {
+    final user = SettingsService.mikrotikUser;
+    final pass = SettingsService.mikrotikPass;
 
-      final credentials = base64Encode(
-        utf8.encode('$user:$pass'),
-      );
+    final credentials = base64Encode(
+      utf8.encode('$user:$pass'),
+    );
 
-      return 'Basic $credentials';
-    }
+    return 'Basic $credentials';
+  }
 
+  static Uri _buildUri(String path) {
+    final host = SettingsService.mikrotikHost;
+    final port = SettingsService.mikrotikPort;
 
-    static Uri _buildUri(String path) {
-      final host = SettingsService.mikrotikHost;
-      final port = SettingsService.mikrotikPort;
+    final protocol = SettingsService.mikrotikUseSsl ? 'https' : 'http';
 
-      final protocol =
-          SettingsService.mikrotikUseSsl ? 'https' : 'http';
+    return Uri.parse(
+      '$protocol://$host:$port/rest/$path',
+    );
+  }
 
-      return Uri.parse(
-        '$protocol://$host:$port/rest/$path',
-      );
-    }
+  // ==========================
+  // GET PROFILES
+  // ==========================
 
-
-    // ==========================
-    // GET PROFILES (NEW)
-    // ==========================
-
-    static Future<List<String>> getProfiles() async {
-    // ✅ USER PROFILES FETCH KARO
+  static Future<List<String>> getProfiles() async {
     final url = _buildUri('ip/hotspot/user/profile');
     try {
       final response = await http.get(
@@ -46,14 +42,10 @@
         },
       ).timeout(const Duration(seconds: 10));
 
-      
-
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
         final names = data.map((e) => e['name'] as String).toList();
         
-        
-        // ✅ DEFAULT PROFILE BHI ADD KARO (AGAR NAHI HAI)
         if (!names.contains('default')) {
           names.insert(0, 'default');
         }
@@ -62,118 +54,76 @@
       }
       return ['default'];
     } catch (e) {
-      
       return ['default'];
     }
   }
 
-    // ==========================
-    // TEST CONNECTION
-    // ==========================
+  // ==========================
+  // TEST CONNECTION
+  // ==========================
 
-    static Future<bool> checkConnection() async {
-  final url = _buildUri('system/resource');
-  
-  
-  
-  try {
-    final response = await http.get(
-      url,
-      headers: {
-        'Authorization': _getAuthHeader(),
-        'Content-Type': 'application/json',
-      },
-    ).timeout(const Duration(seconds: 5));
+  static Future<bool> checkConnection() async {
+    final url = _buildUri('system/resource');
+    
+    try {
+      final response = await http.get(
+        url,
+        headers: {
+          'Authorization': _getAuthHeader(),
+          'Content-Type': 'application/json',
+        },
+      ).timeout(const Duration(seconds: 5));
 
-    
-
-    // ✅ IP BHI CHECK KARO
-    return response.statusCode == 200;
-    
-  } catch(e) {
-    
-    return false;
+      return response.statusCode == 200;
+      
+    } catch(e) {
+      return false;
+    }
   }
-}
 
-    // ==========================
-    // CREATE HOTSPOT USER
-    // ==========================
+  // ==========================
+  // CREATE HOTSPOT USER
+  // ==========================
 
-    static Future<bool> createHotspotUser({
+  static Future<bool> createHotspotUser({
     required String username,
     required String password,
     required String comment,
     required String profile,
   }) async {
+    final url = _buildUri('ip/hotspot/user');
 
+    try {
+      final response = await http.put(
+        url,
+        headers: {
+          'Authorization': _getAuthHeader(),
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'name': username,
+          'password': password,
+          'comment': comment,
+          'profile': profile,
+        }),
+      ).timeout(const Duration(seconds: 10));
 
-      final url = _buildUri('ip/hotspot/user');
-
-
-      try {
-
-
-        final response = await http.put(
-
-          url,
-
-          headers: {
-
-            'Authorization': _getAuthHeader(),
-            'Content-Type': 'application/json',
-
-          },
-
-
-          body: jsonEncode({
-
-            'name': username,
-            'password': password,
-            'comment': comment,
-            'profile': profile,
-
-          }),
-
-
-        ).timeout(
-          const Duration(seconds: 10),
-        );
-
-
-
-        
-
-
-
-        return response.statusCode == 200 ||
-            response.statusCode == 201;
-
-
-
-      } catch(e) {
-
-        
-
-        return false;
-
-      }
-
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch(e) {
+      return false;
     }
+  }
 
+  // ==========================
+  // DELETE HOTSPOT USER
+  // ==========================
 
-
-
-    // ==========================
-    // DELETE HOTSPOT USER
-    // ==========================
-
-    static Future<bool> deleteHotspotUser(String username) async {
+  static Future<bool> deleteHotspotUser(String username) async {
   try {
     final auth = _getAuthHeader();
 
+    // 1️⃣ GET USER ID
     final url = _buildUri('ip/hotspot/user');
-
     final response = await http.get(
       url,
       headers: {
@@ -195,12 +145,9 @@
 
     final id = user['.id'];
 
-   
-
-    // ⭐ FIXED DELETE URL (IMPORTANT)
+    // 2️⃣ DELETE HOTSPOT USER
     final deleteUrl = _buildUri('ip/hotspot/user/$id');
-
-    final deleteResponse = await http.delete(
+    await http.delete(
       deleteUrl,
       headers: {
         'Authorization': auth,
@@ -208,67 +155,148 @@
       },
     );
 
-   
+    // 3️⃣ DELETE ACTIVE SESSION
+    final activeUrl = _buildUri('ip/hotspot/active');
+    final activeRes = await http.get(
+      activeUrl,
+      headers: {
+        'Authorization': auth,
+        'Content-Type': 'application/json',
+      },
+    );
 
-    return deleteResponse.statusCode == 200 ||
-           deleteResponse.statusCode == 204;
+    if (activeRes.statusCode == 200) {
+      final List activeList = jsonDecode(activeRes.body);
+
+      for (var a in activeList) {
+        if (a['user'] == username) {
+          final activeId = a['.id'];
+          final killUrl = _buildUri('ip/hotspot/active/$activeId');
+          await http.delete(
+            killUrl,
+            headers: {
+              'Authorization': auth,
+              'Content-Type': 'application/json',
+            },
+          );
+        }
+      }
+    }
+
+    // 4️⃣ DELETE HOST ENTRY
+    final hostUrl = _buildUri('ip/hotspot/host');
+    final hostRes = await http.get(
+      hostUrl,
+      headers: {
+        'Authorization': auth,
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (hostRes.statusCode == 200) {
+      final List hosts = jsonDecode(hostRes.body);
+
+      for (var h in hosts) {
+        if (h['user'] == username) {
+          final hostId = h['.id'];
+          final removeHostUrl = _buildUri('ip/hotspot/host/$hostId');
+          await http.delete(
+            removeHostUrl,
+            headers: {
+              'Authorization': auth,
+              'Content-Type': 'application/json',
+            },
+          );
+        }
+      }
+    }
+
+    // 5️⃣ DELETE LOGIN COOKIE
+    final cookieUrl = _buildUri('ip/hotspot/cookie');
+    final cookieRes = await http.get(
+      cookieUrl,
+      headers: {
+        'Authorization': auth,
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (cookieRes.statusCode == 200) {
+      final List cookies = jsonDecode(cookieRes.body);
+
+      for (var c in cookies) {
+        if (c['user'] == username) {
+          final cookieId = c['.id'];
+          final removeCookieUrl = _buildUri('ip/hotspot/cookie/$cookieId');
+          await http.delete(
+            removeCookieUrl,
+            headers: {
+              'Authorization': auth,
+              'Content-Type': 'application/json',
+            },
+          );
+        }
+      }
+    }
+
+    return true;
 
   } catch (e) {
-    
     return false;
   }
 }
 
-    // ==========================
-    // RANDOM USERNAME
-    // ==========================
 
-    static String generateUsername(String name) {
+  // ==========================
+  // RANDOM USERNAME
+  // ==========================
+
+  static String generateUsername(String name) {
     return name.trim();
   }
 
-    // ==========================
-    // RANDOM PASSWORD (UPDATED)
-    // ==========================
+  // ==========================
+  // RANDOM PASSWORD
+  // ==========================
 
-    static String generateRandomPassword(int length, String type) {
-  String chars = '';
+  static String generateRandomPassword(int length, String type) {
+    String chars = '';
 
-  switch (type) {
-    case 'capital':
-      chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-      break;
-    case 'small':
-      chars = 'abcdefghijkmnpqrstuvwxyz';
-      break;
-    case 'mix':
-      chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-      break;
-    case 'number':
-      chars = '23456789';
-      break;
-    default:
-      chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    switch (type) {
+      case 'capital':
+        chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+        break;
+      case 'small':
+        chars = 'abcdefghijkmnpqrstuvwxyz';
+        break;
+      case 'mix':
+        chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        break;
+      case 'number':
+        chars = '23456789';
+        break;
+      default:
+        chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    }
+
+    final random = Random();
+
+    final password = List.generate(
+      length,
+      (index) => chars[random.nextInt(chars.length)],
+    ).join();
+
+    final prefix = SettingsService.passwordPrefix;
+
+    if (prefix == 'None') {
+      return password;
+    } else {
+      return prefix + password;
+    }
   }
 
-  final random = Random();
-
-  final password = List.generate(
-    length,
-    (index) => chars[random.nextInt(chars.length)],
-  ).join();
-
-  // 🔥 PREFIX APPLY HERE (MAIN FIX)
-  final prefix = SettingsService.passwordPrefix;
-
-  if (prefix == 'None') {
-    return password;
-  } else {
-    return prefix + password;
-  }
-}
-      // ==========================
-  // GET AVAILABLE PASSWORDS (PROFILE-WISE)
+  // ==========================
+  // GET AVAILABLE PASSWORDS
   // ==========================
 
   static Future<List<Map<String, dynamic>>> getAvailablePasswords({
@@ -285,55 +313,102 @@
     ).timeout(const Duration(seconds: 5));
 
     if (response.statusCode == 200) {
-  final List<dynamic> data = jsonDecode(response.body);
-  
-  // ✅ DEBUG: DEKHO KE KONSI FIELDS HAIN
-  if (data.isNotEmpty) {
-    
-  }
+      final List<dynamic> data = jsonDecode(response.body);
+      
+      // ✅ SIRF UN USERS KO FILTER KARO JIN KA MAC NAHI HAI
+      var availableUsers = data.where((user) {
+        final mac = (user['mac-address'] ?? '').toString().trim();
+        return mac.isEmpty;  // ✅ SIRF MAC NAHI WALE
+      }).map((user) {
+        return {
+          'name': user['name'] ?? '',
+          'password': user['password'] ?? '',
+          'profile': user['profile'] ?? 'default',
+          'mac-address': user['mac-address'] ?? '',
+          'comment': user['comment'] ?? '',
+        };
+      }).toList();
+      
+      // ✅ AGAR PROFILE SELECT HAI TOH FILTER KARO
+      if (profile != null && profile.isNotEmpty) {
+        availableUsers = availableUsers.where((user) {
+          return user['profile'] == profile;
+        }).toList();
+      }
+      
+      availableUsers.sort((a, b) {
+        return a['name'].toString().compareTo(b['name'].toString());
+      });
 
-  
-  
- var available = data.where((user) {
-
-  final mac =
-      (user['mac-address'] ?? '').toString().trim();
-
-  return mac.isEmpty;
-
-}).toList();
-  // ✅ AGAR PROFILE SELECT HAI TOH US PROFILE KE USERS FILTER KARO
-  if (profile != null && profile.isNotEmpty) {
-    available = available.where((user) {
-      return user['profile'] == profile;
-    }).toList();  // ✅ VAR HATAO (pehle se define hai)
-  }
-  
-  available.sort((a, b) {
-  return a['name']
-      .toString()
-      .compareTo(
-        b['name'].toString(),
-      );
-});
-
-  return available.cast<Map<String, dynamic>>();
-}
+      return availableUsers.cast<Map<String, dynamic>>();
+    }
     return [];
   } catch (e) {
-    
     return [];
   }
 }
+
+// ==========================
+// GET USED PASSWORDS (HAS MAC - SAVED USERS)
+// ==========================
+
+static Future<List<Map<String, dynamic>>> getUsedPasswords({
+  String? profile,
+}) async {
+  final url = _buildUri('ip/hotspot/user');
+  try {
+    final response = await http.get(
+      url,
+      headers: {
+        'Authorization': _getAuthHeader(),
+        'Content-Type': 'application/json',
+      },
+    ).timeout(const Duration(seconds: 5));
+
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      
+      // ✅ SIRF UN USERS KO FILTER KARO JIN KA MAC HAI
+      var usedUsers = data.where((user) {
+        final mac = (user['mac-address'] ?? '').toString().trim();
+        return mac.isNotEmpty;  // ✅ SIRF MAC WALE (USED)
+      }).map((user) {
+        return {
+          'name': user['name'] ?? '',
+          'password': user['password'] ?? '',
+          'profile': user['profile'] ?? 'default',
+          'mac-address': user['mac-address'] ?? '',
+          'comment': user['comment'] ?? '',
+        };
+      }).toList();
+      
+      if (profile != null && profile.isNotEmpty) {
+        usedUsers = usedUsers.where((user) {
+          return user['profile'] == profile;
+        }).toList();
+      }
+      
+      usedUsers.sort((a, b) {
+        return a['name'].toString().compareTo(b['name'].toString());
+      });
+
+      return usedUsers.cast<Map<String, dynamic>>();
+    }
+    return [];
+  } catch (e) {
+    return [];
+  }
+}
+
+
   // ==========================
   // MARK USER AS USED
   // ==========================
 
   static Future<bool> markUserAsUsed(String username) async {
-    // Pehle user find karo
     final findUrl = _buildUri(
-  'ip/hotspot/user?name=${Uri.encodeQueryComponent(username)}',
-);
+      'ip/hotspot/user?name=${Uri.encodeQueryComponent(username)}',
+    );
     try {
       final findResponse = await http.get(
         findUrl,
@@ -365,8 +440,89 @@
       }
       return false;
     } catch (e) {
-      
       return false;
     }
   }
+
+  // ==========================
+  // GET USER PROFILES
+  // ==========================
+
+  static Future<Map<String, String>> getUserProfiles() async {
+    final url = _buildUri('ip/hotspot/user');
+
+    try {
+      final response = await http.get(
+        url,
+        headers: {
+          'Authorization': _getAuthHeader(),
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final List data = jsonDecode(response.body);
+
+        final Map<String, String> map = {};
+
+        for (final user in data) {
+          map[user['name']] = user['profile'] ?? 'default';
+        }
+
+        return map;
+      }
+
+      return {};
+    } catch (e) {
+      return {};
+    }
   }
+
+  // ==========================
+  // GET ACTIVE USERS - FIXED ✅
+  // ==========================
+
+  static Future<List<Map<String, dynamic>>> getActiveUsers() async {
+    try {
+      final url = _buildUri('ip/hotspot/active/print');
+      
+      print('🔄 Fetching active hotspot users...');
+      
+      final response = await http.post(
+        url,
+        headers: {
+          'Authorization': _getAuthHeader(),
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          '.proplist': ['.id', 'user', 'address', 'uptime', 'bytes-in', 'bytes-out', 'server'],
+        }),
+      ).timeout(const Duration(seconds: 10));
+      
+      if (response.statusCode != 200) {
+        print('❌ Failed to fetch active users: ${response.statusCode}');
+        return [];
+      }
+      
+      final List<dynamic> data = jsonDecode(response.body);
+      
+      print('📊 Found ${data.length} active sessions');
+      
+      return data.map((item) {
+        return {
+          'name': item['user'] ?? 'Unknown',
+          'address': item['address'] ?? 'N/A',
+          'uptime': item['uptime'] ?? 'N/A',
+          'bytesIn': item['bytes-in'] ?? '0',
+          'bytesOut': item['bytes-out'] ?? '0',
+          'server': item['server'] ?? 'default',
+          'isActive': true,
+        };
+      }).toList();
+      
+    } catch (e) {
+      print('❌ Error fetching active users: $e');
+      return [];
+    }
+  } 
+}

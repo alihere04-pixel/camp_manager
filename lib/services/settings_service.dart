@@ -17,7 +17,7 @@ class SettingsService {
   static String get mikrotikPass => _getBox().get('mikrotik_pass', defaultValue: '') as String;
   static String get mikrotikPort => _getBox().get('mikrotik_port', defaultValue: '8081') as String;
   static bool get mikrotikUseSsl => _getBox().get('mikrotik_use_ssl', defaultValue: false) as bool;
-  static String get mikrotikProfile => _getBox().get('mikrotik_profile', defaultValue: 'default') as String;  // ✅ ADD
+  static String get mikrotikProfile => _getBox().get('mikrotik_profile', defaultValue: 'default') as String;
 
 static bool get mikrotikConnected =>
     _getBox().get('mikrotik_connected', defaultValue: false) as bool;
@@ -41,7 +41,7 @@ static Future<void> saveMikrotikConnected(bool value) async {
     await box.put('mikrotik_use_ssl', useSsl);
   }
 
-  static Future<void> saveMikrotikProfile(String profile) async {  // ✅ ADD
+  static Future<void> saveMikrotikProfile(String profile) async {
     await _getBox().put('mikrotik_profile', profile);
   }
 
@@ -49,7 +49,6 @@ static Future<void> saveMikrotikConnected(bool value) async {
   static int get passwordLength => _getBox().get('password_length', defaultValue: 8) as int;
   static String get passwordType => _getBox().get('password_type', defaultValue: 'mix') as String;
 
-// ✅ Password Prefix (None, A-Z)
 static String get passwordPrefix =>
     _getBox().get('password_prefix', defaultValue: 'None') as String;
 

@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import '../services/settings_service.dart';
 import '../services/mikrotik_service.dart';
 import 'password_manager_screen.dart';
+import 'active_users_screen.dart'; 
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
 
 class MikrotikSettingsScreen extends StatefulWidget {
   const MikrotikSettingsScreen({super.key});
@@ -25,6 +27,10 @@ class _MikrotikSettingsScreenState extends State<MikrotikSettingsScreen> {
   bool _isConnected = false;
   
   bool _obscurePassword = true;
+
+  int _savedUsersCount = 0;
+bool _isLoadingSavedUsers = false;
+
   
   int _selectedLength = 8;
   String _selectedType = 'mix';
@@ -36,12 +42,18 @@ class _MikrotikSettingsScreenState extends State<MikrotikSettingsScreen> {
   // ✅ PASSWORD PREFIX (A-Z + None)
   String _selectedPrefix = 'None';
 
-  // ✅ AVAILABLE PASSWORDS VARIABLES
+      // ✅ AVAILABLE PASSWORDS VARIABLES
   List<Map<String, dynamic>> _availablePasswords = [];
   bool _isLoadingPasswords = false;
   final String _selectedPasswordProfile = 'all';
 
-  @override
+   // ✅ ACTIVE USERS COUNT VARIABLES
+  int _activeUsersCount = 0;
+  bool _isLoadingActiveUsers = false;
+  // ✅ Timer HATA DIYA
+
+
+    @override
   void initState() {
     super.initState();
     _hostController = TextEditingController(text: SettingsService.mikrotikHost);
@@ -68,8 +80,12 @@ class _MikrotikSettingsScreenState extends State<MikrotikSettingsScreen> {
 
     _loadProfiles();
     _checkSavedConnection();
-  }
+    
+       _loadActiveUsersCount();
+       _loadSavedUsersCount();
 
+    // ✅ Timer HATA DIYA
+  }
   bool _prefixExists(String value) {
     return value == 'None' ||
         List.generate(
@@ -78,7 +94,7 @@ class _MikrotikSettingsScreenState extends State<MikrotikSettingsScreen> {
         ).contains(value);
   }
 
-  @override
+    @override
   void dispose() {
     _hostController.dispose();
     _portController.dispose();
@@ -139,6 +155,46 @@ class _MikrotikSettingsScreenState extends State<MikrotikSettingsScreen> {
       _isLoadingPasswords = false;
     });
   }
+
+  // ✅ LOAD ACTIVE USERS COUNT
+  Future<void> _loadActiveUsersCount() async {
+    setState(() {
+      _isLoadingActiveUsers = true;
+    });
+    
+    try {
+      final activeUsers = await MikroTikService.getActiveUsers();
+      setState(() {
+        _activeUsersCount = activeUsers.length;
+        _isLoadingActiveUsers = false;
+      });
+    } catch (e) {
+      setState(() {
+        _activeUsersCount = 0;
+        _isLoadingActiveUsers = false;
+      });
+    }
+  }
+
+  Future<void> _loadSavedUsersCount() async {
+  setState(() {
+    _isLoadingSavedUsers = true;
+  });
+
+  try {
+    final saved = await MikroTikService.getUsedPasswords();
+    setState(() {
+      _savedUsersCount = saved.length;
+      _isLoadingSavedUsers = false;
+    });
+  } catch (e) {
+    setState(() {
+      _savedUsersCount = 0;
+      _isLoadingSavedUsers = false;
+    });
+  }
+}
+
 
   Future<void> _checkSavedConnection() async {
     try {
@@ -218,6 +274,9 @@ class _MikrotikSettingsScreenState extends State<MikrotikSettingsScreen> {
     
     await SettingsService.saveMikrotikProfile(_selectedProfile);
     
+    // ✅ AUTO-REMOVE SAVE KARO
+
+    
     // ✅ FORCE DISCONNECT (STATUS RESET)
     _isConnected = false;
     await SettingsService.saveMikrotikConnected(false);
@@ -268,65 +327,128 @@ class _MikrotikSettingsScreenState extends State<MikrotikSettingsScreen> {
             const SizedBox(height: 16),
 
             // ✅ AVAILABLE PASSWORDS (CLICKABLE CARD)
-            InkWell(
-              onTap: () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const PasswordManagerScreen(),
-                  ),
-                );
-                _loadAvailablePasswords();
-              },
-              borderRadius: BorderRadius.circular(12),
-              child: Card(
-                color: Colors.indigo[50],
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.password, color: Colors.indigo),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Available Passwords',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.indigo,
-                              ),
-                            ),
-                            if (_isLoadingPasswords)
-                              const Text(
-                                'Loading...',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey,
-                                ),
-                              )
-                            else
-                              Text(
-                                '${_availablePasswords.length} passwords available',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                      const Icon(Icons.arrow_forward_ios, color: Colors.indigo, size: 16),
-                    ],
+InkWell(
+  onTap: () async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const PasswordManagerScreen(),
+      ),
+    );
+    _loadAvailablePasswords();
+  },
+  borderRadius: BorderRadius.circular(12),
+  child: Card(
+    color: Colors.indigo[50],
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          const Icon(Icons.password, color: Colors.indigo),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Available Passwords',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.indigo,
                   ),
                 ),
-              ),
+                if (_isLoadingPasswords)
+                  const Text(
+                    'Loading...',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey,
+                    ),
+                  )
+                else
+                  Text(
+                    '${_availablePasswords.length} passwords available',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey,
+                    ),
+                  ),
+              ],
             ),
-            
-            const SizedBox(height: 16),
-            
+          ),
+          const Icon(Icons.arrow_forward_ios, color: Colors.indigo, size: 16),
+        ],
+      ),
+    ),
+  ),
+),
+
+const SizedBox(height: 16),  // ✅ SIRF 1 GAP (12 WALA DELETE KARO)
+
+// ✅ ACTIVE USERS (CLICKABLE CARD)
+InkWell(
+  onTap: () async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const ActiveUsersScreen(),
+      ),
+    );
+    _loadActiveUsersCount();  // ✅ WAPAS AANE PAR REFRESH
+    _loadSavedUsersCount();
+
+  },
+  
+  borderRadius: BorderRadius.circular(12),
+  child: Card(
+    color: Colors.green[50],
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          const Icon(Icons.person, color: Colors.green),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+  'Saved Users',
+  style: TextStyle(
+    fontSize: 16,
+    fontWeight: FontWeight.bold,
+    color: Colors.green,
+  ),
+),
+
+if (_isLoadingSavedUsers)
+  const Text(
+    'Loading...',
+    style: TextStyle(
+      fontSize: 12,
+      color: Colors.grey,
+    ),
+  )
+else
+  Text(
+    '$_savedUsersCount saved users',
+    style: TextStyle(
+      fontSize: 12,
+      color: Colors.grey,
+    ),
+  ),
+
+              ],
+            ),
+          ),
+          const Icon(Icons.arrow_forward_ios, color: Colors.green, size: 16),
+        ],
+      ),
+    ),
+  ),
+),
+const SizedBox(height: 16), 
             // IP Address
             TextFormField(
               controller: _hostController,
@@ -532,7 +654,7 @@ class _MikrotikSettingsScreenState extends State<MikrotikSettingsScreen> {
             
             const SizedBox(height: 16),
             
-            // ✅ USER PROFILE
+                        // ✅ USER PROFILE
             const Text(
               'User Profile',
               style: TextStyle(
@@ -574,6 +696,8 @@ class _MikrotikSettingsScreenState extends State<MikrotikSettingsScreen> {
                       ),
               ),
             ),
+            
+
             
             const SizedBox(height: 24),
             
