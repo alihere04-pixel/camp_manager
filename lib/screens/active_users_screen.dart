@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:hive/hive.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 import '../services/mikrotik_service.dart';
 import '../models/user_model.dart';
 import '../database/hive_database.dart';
 import 'active_users_only_screen.dart';
+import 'user_details_screen.dart';
+
 
 class ActiveUsersScreen extends StatefulWidget {
   const ActiveUsersScreen({super.key});
@@ -24,6 +24,10 @@ class _ActiveUsersScreenState extends State<ActiveUsersScreen> {
   // ✅ SELECTION MODE VARIABLES
   bool _isSelectionMode = false;
   Set<String> _selectedUserIds = {};
+    // ✅ SEARCH BAR VARIABLES
+  final TextEditingController _searchController = TextEditingController();
+  bool _isSearchMode = false;
+
 
   @override
   void initState() {
@@ -37,7 +41,7 @@ class _ActiveUsersScreenState extends State<ActiveUsersScreen> {
     });
 
     try {
-      print('🔄 Loading users with MAC addresses...');
+     
       
       final allUsers = await MikroTikService.getUsedPasswords();    
 
@@ -53,11 +57,10 @@ class _ActiveUsersScreenState extends State<ActiveUsersScreen> {
           .where((name) => name.isNotEmpty)
           .toSet();
       
-      print('📡 Found ${usersWithMac.length} users with MAC addresses');
-      print('📡 Found ${_activeUsernames.length} active users');
+      
 
       if (usersWithMac.isEmpty) {
-        print('⚠️ No users with MAC found');
+        
         if (mounted) {
           setState(() {
             _activeUsers = [];
@@ -83,7 +86,7 @@ class _ActiveUsersScreenState extends State<ActiveUsersScreen> {
         // ✅ CHECK KARO KE YEH USER ACTIVE HAI YA NAHI
         final isActive = _activeUsernames.contains(username);
         
-        print('🔍 Processing user: $username (MAC: $mac) (Active: $isActive)');
+        
         
         final matchingLocalUser = localUsers.firstWhere(
           (u) => u.voucherUsername == username || u.voucherCode == username,
@@ -101,16 +104,22 @@ class _ActiveUsersScreenState extends State<ActiveUsersScreen> {
         );
         
         activeList.add({
-          'username': username,
-          'macAddress': mac,
-          'isActive': isActive,  // ✅ ACTIVE STATUS
-          'localUser': matchingLocalUser,
-          'localUserName': matchingLocalUser.name,
-        });
+  'username': username,
+  'macAddress': mac,
+  'isActive': isActive,
+  'localUser': matchingLocalUser,
+  'localUserName': matchingLocalUser.name,
+
+  // ⭐ ADD THIS LINE
+  'profile': mikrotikUser['profile'] ??
+             mikrotikUser['profile-name'] ??
+             mikrotikUser['user-profile'] ??
+             'default',
+});
+
       }
 
-      print('📊 Total users with MAC: ${activeList.length}');
-      print('📊 Active users: ${_activeUsernames.length}');
+      
       
       if (mounted) {
         setState(() {
@@ -119,11 +128,11 @@ class _ActiveUsersScreenState extends State<ActiveUsersScreen> {
           _totalActiveUsers = activeList.length;
           _isLoading = false;
         });
-        print('✅ State updated: ${_activeUsers.length} users');
+        
       }
       
     } catch (e) {
-      print('❌ Error loading users: $e');
+      
       if (mounted) {
         setState(() {
           _activeUsers = [];
@@ -135,47 +144,7 @@ class _ActiveUsersScreenState extends State<ActiveUsersScreen> {
     }
   }
 
-  // ✅ SEARCH DIALOG
-  void _openSearchDialog() {
-  final TextEditingController searchController = TextEditingController();
   
-  showDialog(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('Search User'),
-      content: TextField(
-        controller: searchController,
-        autofocus: true,
-        decoration: const InputDecoration(
-          hintText: 'Search by Username, MAC or Name...',
-          border: OutlineInputBorder(),
-          prefixIcon: Icon(Icons.search),
-        ),
-        // ✅ LIVE SEARCH - JAISAY LIKHO WAISAY FILTER
-        onChanged: (value) {
-          _searchUser(value);
-        },
-        onSubmitted: (value) {
-          _searchUser(value);
-          Navigator.pop(context);
-        },
-      ),
-      actions: [
-        TextButton(
-          onPressed: () {
-            _searchUser('');
-            Navigator.pop(context);
-          },
-          child: const Text('Clear'),
-        ),
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Close'),
-        ),
-      ],
-    ),
-  );
-}
 
   void _searchUser(String query) {
   if (query.isEmpty) {
@@ -237,115 +206,136 @@ class _ActiveUsersScreenState extends State<ActiveUsersScreen> {
       ),
     );
 
-    if (confirm != true) return;
 
-    int deleted = 0;
-    int failed = 0;
 
-    for (final username in _selectedUserIds) {
-      try {
-        final success = await MikroTikService.deleteHotspotUser(username);
-        if (success) {
-          deleted++;
-        } else {
-          failed++;
-        }
-      } catch (e) {
-        failed++;
-      }
+   if (confirm != true) return;
+
+int deleted = 0;
+int failed = 0;
+
+for (final username in _selectedUserIds) {
+  try {
+    final success = await MikroTikService.deleteHotspotUser(username);
+    if (success) {
+      deleted++;
+    } else {
+      failed++;
     }
+  } catch (e) {
+    failed++;
+  }
+}
 
-    // ✅ LOCAL LIST SE REMOVE
-    setState(() {
-      _activeUsers.removeWhere((u) => _selectedUserIds.contains(u['username']));
-      _filteredUsers.removeWhere((u) => _selectedUserIds.contains(u['username']));
-      _totalActiveUsers = _activeUsers.length;
-      _selectedUserIds.clear();
-      _isSelectionMode = false;
-    });
+if (!mounted) return;   // ⭐⭐ REAL FIX — yahi jagah sahi hai ⭐⭐
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('✅ $deleted deleted${failed > 0 ? ", $failed failed" : ""}'),
-        backgroundColor: failed > 0 ? Colors.orange : Colors.green,
-      ),
-    );
+setState(() {
+  _activeUsers.removeWhere((u) => _selectedUserIds.contains(u['username']));
+  _filteredUsers.removeWhere((u) => _selectedUserIds.contains(u['username']));
+  _totalActiveUsers = _activeUsers.length;
+  _selectedUserIds.clear();
+  _isSelectionMode = false;
+});
+
+ScaffoldMessenger.of(context).showSnackBar(
+  SnackBar(
+    content: Text('✅ $deleted deleted${failed > 0 ? ", $failed failed" : ""}'),
+    backgroundColor: failed > 0 ? Colors.orange : Colors.green,
+  ),
+);
+
   }
 
   @override
   Widget build(BuildContext context) {
-    print('🏗️ Building ActiveUsersScreen');
-    print('📊 _activeUsers: ${_activeUsers.length}');
-    print('📊 _totalActiveUsers: $_totalActiveUsers');
+    
     
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Saved Users'),
+            appBar: AppBar(
+        title: _isSearchMode
+            ? TextField(
+                controller: _searchController,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  hintText: 'Search by Username, MAC or Name...',
+                  border: InputBorder.none,
+                  prefixIcon: Icon(Icons.search),
+                ),
+                onChanged: (value) {
+                  _searchUser(value);
+                },
+              )
+            : const Text('Saved Users'),
         actions: [
-  Container(
-    margin: const EdgeInsets.only(right: 8),
-    child: Center(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: Colors.indigo[50],
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(
-          '$_totalActiveUsers',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: Colors.indigo[800],
+          Container(
+            margin: const EdgeInsets.only(right: 8),
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.indigo[50],
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '$_totalActiveUsers',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.indigo[800],
+                  ),
+                ),
+              ),
+            ),
           ),
-        ),
+          if (_isSelectionMode) ...[
+            IconButton(
+              icon: Icon(
+                _selectedUserIds.length == _filteredUsers.length
+                    ? Icons.deselect
+                    : Icons.select_all,
+              ),
+              onPressed: () {
+                setState(() {
+                  if (_selectedUserIds.length == _filteredUsers.length) {
+                    _selectedUserIds.clear();
+                  } else {
+                    _selectedUserIds = _filteredUsers
+                        .map((u) => u['username'].toString())
+                        .toSet();
+                  }
+                });
+              },
+              tooltip: 'Select All',
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete, color: Colors.red),
+              onPressed: _selectedUserIds.isEmpty ? null : _deleteSelectedUsers,
+              tooltip: 'Delete Selected',
+            ),
+            IconButton(
+              icon: const Icon(Icons.close),
+              onPressed: _exitSelectionMode,
+              tooltip: 'Cancel',
+            ),
+          ] else ...[
+            IconButton(
+              icon: Icon(_isSearchMode ? Icons.close : Icons.search),
+              onPressed: () {
+                setState(() {
+                  if (_isSearchMode) {
+                    _isSearchMode = false;
+                    _searchController.clear();
+                    _searchUser('');
+                  } else {
+                    _isSearchMode = true;
+                  }
+                });
+              },
+              tooltip: _isSearchMode ? 'Close Search' : 'Search',
+            ),
+          ],
+        ],
       ),
-    ),
-  ),
-  // ✅ SELECTION MODE KE HISAB SE BUTTONS
-  if (_isSelectionMode) ...[
-    // SELECT ALL BUTTON
-    IconButton(
-      icon: Icon(
-        _selectedUserIds.length == _filteredUsers.length
-            ? Icons.deselect
-            : Icons.select_all,
-      ),
-      onPressed: () {
-        setState(() {
-          if (_selectedUserIds.length == _filteredUsers.length) {
-            _selectedUserIds.clear();
-          } else {
-            _selectedUserIds = _filteredUsers
-                .map((u) => u['username'].toString())
-                .toSet();
-          }
-        });
-      },
-      tooltip: 'Select All',
-    ),
-    // DELETE SELECTED BUTTON
-    IconButton(
-      icon: const Icon(Icons.delete, color: Colors.red),
-      onPressed: _selectedUserIds.isEmpty ? null : _deleteSelectedUsers,
-      tooltip: 'Delete Selected',
-    ),
-    // CANCEL BUTTON
-    IconButton(
-      icon: const Icon(Icons.close),
-      onPressed: _exitSelectionMode,
-      tooltip: 'Cancel',
-    ),
-  ] else ...[
-    // SEARCH BUTTON
-    IconButton(
-      icon: const Icon(Icons.search),
-      onPressed: _openSearchDialog,
-      tooltip: 'Search',
-    ),
-  ],
-],
-      ),
+
       body: RefreshIndicator(
         onRefresh: _loadActiveUsers,
         child: _isLoading
@@ -358,12 +348,16 @@ class _ActiveUsersScreenState extends State<ActiveUsersScreen> {
                     child: InkWell(
                       onTap: () async {
                         await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const ActiveUsersOnlyScreen(),
-                          ),
-                        );
-                        _loadActiveUsers();
+  context,
+  MaterialPageRoute(
+    builder: (context) => const ActiveUsersOnlyScreen(),
+  ),
+);
+
+if (!mounted) return;   // ⭐ FIX
+
+_loadActiveUsers();
+
                       },
                       borderRadius: BorderRadius.circular(12),
                       child: Card(
@@ -434,7 +428,7 @@ class _ActiveUsersScreenState extends State<ActiveUsersScreen> {
                             padding: const EdgeInsets.all(12),
                             itemCount: _filteredUsers.length,
                             itemBuilder: (context, index) {
-                              print('📋 Building item: $index');
+                              
 
                               final user = _filteredUsers[index];
                               return Card(
@@ -447,22 +441,34 @@ class _ActiveUsersScreenState extends State<ActiveUsersScreen> {
         _selectedUserIds.add(user['username'].toString());
       });
     },
-    // ✅ TAP = SELECT/DESELECT (SELECTION MODE MEIN)
-    onTap: () {
-      if (_isSelectionMode) {
-        setState(() {
-          final username = user['username'].toString();
-          if (_selectedUserIds.contains(username)) {
-            _selectedUserIds.remove(username);
-            if (_selectedUserIds.isEmpty) {
-              _isSelectionMode = false;
-            }
-          } else {
-            _selectedUserIds.add(username);
-          }
-        });
+   onTap: () {
+  if (_isSelectionMode) {
+    setState(() {
+      final username = user['username'].toString();
+      if (_selectedUserIds.contains(username)) {
+        _selectedUserIds.remove(username);
+        if (_selectedUserIds.isEmpty) {
+          _isSelectionMode = false;
+        }
+      } else {
+        _selectedUserIds.add(username);
       }
-    },
+    });
+  } else {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => UserDetailsScreen(
+          username: user['username'],
+          password: user['localUser']?.voucherCode ?? user['username'],
+          mac: user['macAddress'],
+          profile: user['profile'],
+        ),
+      ),
+    );
+  }
+},
+
     leading: _isSelectionMode
         ? Checkbox(
             value: _selectedUserIds.contains(user['username'].toString()),
@@ -497,16 +503,25 @@ class _ActiveUsersScreenState extends State<ActiveUsersScreen> {
       style: const TextStyle(fontWeight: FontWeight.bold),
     ),
     subtitle: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('MAC: ${user['macAddress'] ?? 'N/A'}'),
-        if (user['localUserName'] != 'Unknown' && user['localUserName'] != '')
-          Text(
-            'Local User: ${user['localUserName']}',
-            style: const TextStyle(color: Colors.indigo),
-          ),
-      ],
-    ),
+  crossAxisAlignment: CrossAxisAlignment.start,
+  children: [
+    Text('MAC: ${user['macAddress'] ?? 'N/A'}'),
+
+    if (user['localUserName'] != 'Unknown' && user['localUserName'] != '')
+      Text(
+        'Local User: ${user['localUserName']}',
+        style: const TextStyle(color: Colors.indigo),
+      ),
+
+    // ⭐ NEW LINE — PROFILE SHOW
+   Text(
+  '${user['profile'] ?? 'default'}',
+  style: const TextStyle(color: Colors.deepPurple),
+),
+
+  ],
+),
+
     trailing: Container(
       padding: const EdgeInsets.symmetric(
         horizontal: 10,
@@ -538,5 +553,10 @@ class _ActiveUsersScreenState extends State<ActiveUsersScreen> {
               ),
       ),
     );
+  }
+    @override
+  void dispose() {
+    _searchController.dispose();   // ⭐ YEH LINE YAHAN
+    super.dispose();
   }
 }

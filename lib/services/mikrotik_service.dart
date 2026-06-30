@@ -183,61 +183,35 @@ class MikroTikService {
       }
     }
 
-    // 4️⃣ DELETE HOST ENTRY
-    final hostUrl = _buildUri('ip/hotspot/host');
-    final hostRes = await http.get(
-      hostUrl,
-      headers: {
-        'Authorization': auth,
-        'Content-Type': 'application/json',
-      },
-    );
+    // 4️⃣ DELETE HOST ENTRY (MAC BASED)
+final hostUrl = _buildUri('ip/hotspot/host');
+final hostRes = await http.get(
+  hostUrl,
+  headers: {
+    'Authorization': auth,
+    'Content-Type': 'application/json',
+  },
+);
 
-    if (hostRes.statusCode == 200) {
-      final List hosts = jsonDecode(hostRes.body);
+if (hostRes.statusCode == 200) {
+  final List hosts = jsonDecode(hostRes.body);
 
-      for (var h in hosts) {
-        if (h['user'] == username) {
-          final hostId = h['.id'];
-          final removeHostUrl = _buildUri('ip/hotspot/host/$hostId');
-          await http.delete(
-            removeHostUrl,
-            headers: {
-              'Authorization': auth,
-              'Content-Type': 'application/json',
-            },
-          );
-        }
-      }
+  for (var h in hosts) {
+    // Host table me user empty hota hai, MAC se match karte hain
+    if ((h['mac-address'] ?? '') == (user['mac-address'] ?? '')) {
+      final hostId = h['.id'];
+      final removeHostUrl = _buildUri('ip/hotspot/host/$hostId');
+      await http.delete(
+        removeHostUrl,
+        headers: {
+          'Authorization': auth,
+          'Content-Type': 'application/json',
+        },
+      );
     }
+  }
+}
 
-    // 5️⃣ DELETE LOGIN COOKIE
-    final cookieUrl = _buildUri('ip/hotspot/cookie');
-    final cookieRes = await http.get(
-      cookieUrl,
-      headers: {
-        'Authorization': auth,
-        'Content-Type': 'application/json',
-      },
-    );
-
-    if (cookieRes.statusCode == 200) {
-      final List cookies = jsonDecode(cookieRes.body);
-
-      for (var c in cookies) {
-        if (c['user'] == username) {
-          final cookieId = c['.id'];
-          final removeCookieUrl = _buildUri('ip/hotspot/cookie/$cookieId');
-          await http.delete(
-            removeCookieUrl,
-            headers: {
-              'Authorization': auth,
-              'Content-Type': 'application/json',
-            },
-          );
-        }
-      }
-    }
 
     return true;
 
@@ -320,13 +294,20 @@ class MikroTikService {
         final mac = (user['mac-address'] ?? '').toString().trim();
         return mac.isEmpty;  // ✅ SIRF MAC NAHI WALE
       }).map((user) {
-        return {
-          'name': user['name'] ?? '',
-          'password': user['password'] ?? '',
-          'profile': user['profile'] ?? 'default',
-          'mac-address': user['mac-address'] ?? '',
-          'comment': user['comment'] ?? '',
-        };
+       return {
+  'name': user['name'] ?? '',
+  'password': user['password'] ?? '',
+
+  'profile': 
+      user['profile'] ??
+      user['profile-name'] ??
+      user['user-profile'] ??
+      'default',
+
+  'mac-address': user['mac-address'] ?? '',
+  'comment': user['comment'] ?? '',
+};
+
       }).toList();
       
       // ✅ AGAR PROFILE SELECT HAI TOH FILTER KARO
@@ -373,13 +354,20 @@ static Future<List<Map<String, dynamic>>> getUsedPasswords({
         final mac = (user['mac-address'] ?? '').toString().trim();
         return mac.isNotEmpty;  // ✅ SIRF MAC WALE (USED)
       }).map((user) {
-        return {
-          'name': user['name'] ?? '',
-          'password': user['password'] ?? '',
-          'profile': user['profile'] ?? 'default',
-          'mac-address': user['mac-address'] ?? '',
-          'comment': user['comment'] ?? '',
-        };
+       return {
+  'name': user['name'] ?? '',
+  'password': user['password'] ?? '',
+
+  'profile': 
+      user['profile'] ??
+      user['profile-name'] ??
+      user['user-profile'] ??
+      'default',
+
+  'mac-address': user['mac-address'] ?? '',
+  'comment': user['comment'] ?? '',
+};
+
       }).toList();
       
       if (profile != null && profile.isNotEmpty) {
@@ -466,7 +454,11 @@ static Future<List<Map<String, dynamic>>> getUsedPasswords({
         final Map<String, String> map = {};
 
         for (final user in data) {
-          map[user['name']] = user['profile'] ?? 'default';
+          map[user['name']] =
+    user['profile'] ??
+    user['profile-name'] ??
+    user['user-profile'] ??
+    'default';
         }
 
         return map;
@@ -486,7 +478,7 @@ static Future<List<Map<String, dynamic>>> getUsedPasswords({
     try {
       final url = _buildUri('ip/hotspot/active/print');
       
-      print('🔄 Fetching active hotspot users...');
+      
       
       final response = await http.post(
         url,
@@ -500,13 +492,13 @@ static Future<List<Map<String, dynamic>>> getUsedPasswords({
       ).timeout(const Duration(seconds: 10));
       
       if (response.statusCode != 200) {
-        print('❌ Failed to fetch active users: ${response.statusCode}');
+        
         return [];
       }
       
       final List<dynamic> data = jsonDecode(response.body);
       
-      print('📊 Found ${data.length} active sessions');
+      
       
       return data.map((item) {
         return {
@@ -521,8 +513,38 @@ static Future<List<Map<String, dynamic>>> getUsedPasswords({
       }).toList();
       
     } catch (e) {
-      print('❌ Error fetching active users: $e');
+      
       return [];
     }
   } 
+
+static Future<Map<String, String>> getProfileExpiryMap() async {
+  final url = _buildUri('ip/hotspot/user/profile');
+
+  try {
+    final response = await http.get(
+      url,
+      headers: {
+        'Authorization': _getAuthHeader(),
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (response.statusCode != 200) return {};
+
+    final List<dynamic> data = jsonDecode(response.body);
+
+    final Map<String, String> map = {};
+
+    for (final p in data) {
+      map[p['name']] = p['session-timeout'] ?? '0';
+    }
+
+    return map;
+  } catch (e) {
+    return {};
+  }
+}
+
+
 }

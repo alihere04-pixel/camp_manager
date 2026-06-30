@@ -48,8 +48,7 @@ bool _isLoadingSavedUsers = false;
   final String _selectedPasswordProfile = 'all';
 
    // ✅ ACTIVE USERS COUNT VARIABLES
-  int _activeUsersCount = 0;
-  bool _isLoadingActiveUsers = false;
+ 
   // ✅ Timer HATA DIYA
 
 
@@ -81,7 +80,7 @@ bool _isLoadingSavedUsers = false;
     _loadProfiles();
     _checkSavedConnection();
     
-       _loadActiveUsersCount();
+     
        _loadSavedUsersCount();
 
     // ✅ Timer HATA DIYA
@@ -156,25 +155,7 @@ bool _isLoadingSavedUsers = false;
     });
   }
 
-  // ✅ LOAD ACTIVE USERS COUNT
-  Future<void> _loadActiveUsersCount() async {
-    setState(() {
-      _isLoadingActiveUsers = true;
-    });
-    
-    try {
-      final activeUsers = await MikroTikService.getActiveUsers();
-      setState(() {
-        _activeUsersCount = activeUsers.length;
-        _isLoadingActiveUsers = false;
-      });
-    } catch (e) {
-      setState(() {
-        _activeUsersCount = 0;
-        _isLoadingActiveUsers = false;
-      });
-    }
-  }
+ 
 
   Future<void> _loadSavedUsersCount() async {
   setState(() {
@@ -227,11 +208,15 @@ bool _isLoadingSavedUsers = false;
       _selectedProfile = 'default';
     }
     
-    setState(() => _isLoadingProfiles = false);
-    
-    // ✅ PROFILES LOAD HONE KE BAAD PASSWORDS LOAD KARO
-    _loadAvailablePasswords();
-  }
+   setState(() => _isLoadingProfiles = false);
+
+// PROFILES LOAD HONE KE BAAD — sirf tab load karo jab loading nahi ho rahi
+if (!_isLoadingPasswords) {
+  _loadAvailablePasswords();
+}
+}   // ← ⭐ THIS BRACKET WAS MISSING (VERY IMPORTANT)
+
+
 
   Future<void> _testConnection() async {
     setState(() => _isLoading = true);
@@ -395,13 +380,16 @@ InkWell(
         builder: (context) => const ActiveUsersScreen(),
       ),
     );
-    _loadActiveUsersCount();  // ✅ WAPAS AANE PAR REFRESH
-    _loadSavedUsersCount();
 
+    // ACTIVE USERS refresh
+    if (!_isLoadingSavedUsers) {
+      _loadSavedUsersCount();
+    }
   },
-  
+
   borderRadius: BorderRadius.circular(12),
   child: Card(
+  
     color: Colors.green[50],
     child: Padding(
       padding: const EdgeInsets.all(16),
@@ -560,12 +548,12 @@ const SizedBox(height: 16),
             ),
             const SizedBox(height: 8),
             
-            DropdownButtonFormField<String>(
-              value: _selectedPrefix,
-              decoration: const InputDecoration(
-                labelText: 'Prefix (A-Z)',
-                border: OutlineInputBorder(),
-              ),
+         DropdownButtonFormField<String>(
+  initialValue: _selectedPrefix,   // ⭐ yahan change
+  decoration: const InputDecoration(
+    labelText: 'Prefix (A-Z)',
+    border: OutlineInputBorder(),
+  ),
               items: [
                 const DropdownMenuItem(
                   value: 'None',
@@ -599,12 +587,12 @@ const SizedBox(height: 16),
             ),
             const SizedBox(height: 8),
             
-            DropdownButtonFormField<int>(
-              value: _selectedLength,
-              decoration: const InputDecoration(
-                labelText: 'Length',
-                border: OutlineInputBorder(),
-              ),
+           DropdownButtonFormField<int>(
+  initialValue: _selectedLength,   // ⭐ yahan change
+  decoration: const InputDecoration(
+    labelText: 'Length',
+    border: OutlineInputBorder(),
+  ),
               items: const [
                 DropdownMenuItem(value: 4, child: Text('4')),
                 DropdownMenuItem(value: 6, child: Text('6')),
@@ -632,12 +620,12 @@ const SizedBox(height: 16),
             ),
             const SizedBox(height: 8),
             
-            DropdownButtonFormField<String>(
-              value: _selectedType,
-              decoration: const InputDecoration(
-                labelText: 'Type',
-                border: OutlineInputBorder(),
-              ),
+           DropdownButtonFormField<String>(
+  initialValue: _selectedType,     // ⭐ yahan change
+  decoration: const InputDecoration(
+    labelText: 'Type',
+    border: OutlineInputBorder(),
+  ),
               items: const [
                 DropdownMenuItem(value: 'capital', child: Text('Capital (ABC)')),
                 DropdownMenuItem(value: 'small', child: Text('Small (abc)')),
