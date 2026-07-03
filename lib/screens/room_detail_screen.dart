@@ -220,30 +220,137 @@ ScaffoldMessenger.of(context).showSnackBar(
     }
   }
 
-  Future<void> _sendUserPassword(User user) async {
-    final result = await WhatsAppService.sendPasswordToUser(user);
-    setState(() {
-     
-    });
-    
-    if (mounted) {
-      String message;
-      if (result['success'] == true) {
-        if (result['source'] == 'pdf') {
-          message = '✅ Password sent to ${user.name} from PDF voucher!';
-        } else if (result['source'] == 'mikrotik') {
-          message = '✅ Password sent to ${user.name} from MikroTik!';
-        } else {
-          message = '✅ Password sent to ${user.name}!';
-        }
-      } else {
-        message = '❌ ${result['message'] ?? "Failed to send. Check WhatsApp number."}';
+ Future<void> _sendUserPassword(User user) async {
+  // ⭐ Direct send — no comment dialog
+  final result = await WhatsAppService.sendPasswordToUser(user);
+
+  // ⭐ Mark as sent (icon blue)
+  final userBox = HiveDatabase.getUsersBox();
+  final existingUser = userBox.get(user.id);
+
+  if (existingUser != null) {
+    final updatedUser = existingUser.copyWith(
+      isSentMarked: true,        // ⭐ Always mark sent
+      updatedAt: DateTime.now(),
+    );
+
+    await userBox.put(updatedUser.id, updatedUser);
+    await _refreshRoom();
+
+    // ⭐ AUTO UPDATE ROOM SEND STATUS (INDIVIDUAL)
+    final roomBox = HiveDatabase.getRoomsBox();
+    final freshRoom = roomBox.get(_room.id);
+
+    if (freshRoom != null) {
+      final allSent = freshRoom.users.every((u) => u.isSentMarked);
+      final updatedRoom = freshRoom.copyWith(allUsersSent: allSent);
+      await roomBox.put(updatedRoom.id, updatedRoom);
+
+      if (mounted) {
+        setState(() => _room = updatedRoom);
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message), duration: const Duration(seconds: 3)),
-      );
     }
   }
+
+  if (!mounted) return;
+
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(
+        result['success'] == true
+            ? '✅ Password sent to ${user.name}!'
+            : '❌ ${result['message'] ?? "Failed to send"}',
+      ),
+    ),
+  );
+}
+
+Future<void> _editUserComment() async {
+  if (_selectedUserIds.length != 1) return;
+
+  final userId = _selectedUserIds.first;
+  final user = _room.users.firstWhere((u) => u.id == userId);
+
+  final controller = TextEditingController(text: user.comment ?? '');
+
+  final confirm = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text('Edit Comment for ${user.name}'),
+      content: TextField(
+        controller: controller,
+        maxLines: 3,
+        decoration: const InputDecoration(
+          border: OutlineInputBorder(),
+          hintText: 'Write comment...',
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Save'),
+        ),
+      ],
+    ),
+  );
+
+  if (confirm != true) return;
+
+  final userBox = HiveDatabase.getUsersBox();
+  final existingUser = userBox.get(user.id);
+
+  if (existingUser != null) {
+    final updatedUser = existingUser.copyWith(
+      comment: controller.text.trim(),
+      updatedAt: DateTime.now(),
+    );
+    await userBox.put(updatedUser.id, updatedUser);
+    await _refreshRoom();
+  }
+}
+Future<void> _removeUserComment() async {
+  if (_selectedUserIds.length != 1) return;
+
+  final userId = _selectedUserIds.first;
+  final user = _room.users.firstWhere((u) => u.id == userId);
+
+  final confirm = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Remove Comment'),
+      content: Text('Delete comment for ${user.name}?'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Delete'),
+        ),
+      ],
+    ),
+  );
+
+  if (confirm != true) return;
+
+  final userBox = HiveDatabase.getUsersBox();
+  final existingUser = userBox.get(user.id);
+
+  if (existingUser != null) {
+    final updatedUser = existingUser.copyWith(
+      comment: '',
+      updatedAt: DateTime.now(),
+    );
+    await userBox.put(updatedUser.id, updatedUser);
+    await _refreshRoom();
+  }
+}
+
 
   void _openCurrentUser() async {
     if (!mounted) return;
@@ -309,6 +416,18 @@ ScaffoldMessenger.of(context).showSnackBar(
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('✅ Queue Finished!')),
         );
+
+        // ⭐ AUTO UPDATE ROOM SEND STATUS (BULK QUEUE)
+        final roomBox = HiveDatabase.getRoomsBox();
+        final freshRoom = roomBox.get(_room.id);
+
+        if (freshRoom != null) {
+          final allSent = freshRoom.users.every((u) => u.isSentMarked);
+          final updatedRoom = freshRoom.copyWith(allUsersSent: allSent);
+          roomBox.put(updatedRoom.id, updatedRoom);
+
+          setState(() => _room = updatedRoom);
+        }
       }
       return;
     }
@@ -405,52 +524,70 @@ ScaffoldMessenger.of(context).showSnackBar(
               ? '${_room.roomNumber} (${_currentIndex + 1}/${_queueUsers.length})'
               : _room.roomNumber,
         ),
-        actions: [
-          if (_isSelectionMode) ...[
-            if (_selectedUserIds.length == 1)
-              IconButton(
-                icon: const Icon(Icons.edit),
-                onPressed: _editSelectedUser,
-                tooltip: 'Edit User',
-              ),
-            IconButton(
-              icon: const Icon(Icons.delete, color: Colors.red),
-              onPressed: _deleteSelectedUsers,
-              tooltip: 'Delete',
-            ),
-            IconButton(
-              icon: Icon(_selectedUserIds.length == _room.users.length 
-                  ? Icons.deselect 
-                  : Icons.select_all),
-              onPressed: _selectedUserIds.length == _room.users.length
-                  ? _deselectAllUsers
-                  : _selectAllUsers,
-              tooltip: _selectedUserIds.length == _room.users.length 
-                  ? 'Deselect All' 
-                  : 'Select All',
-            ),
-            IconButton(
-              icon: const Icon(Icons.close),
-              onPressed: _deselectAllUsers,
-              tooltip: 'Cancel',
-            ),
-          ] else ...[
-            if (_isQueueActive && _queueUsers.isNotEmpty)
-              IconButton(
-                icon: const Icon(Icons.skip_next),
-                onPressed: () {
-                  
-                  _nextUser();
-                },
-                tooltip: 'Next User (${_currentIndex + 1}/${_queueUsers.length})',
-              ),
-            IconButton(
-              icon: const Icon(Icons.play_arrow),
-              onPressed: _isQueueActive ? null : _sendAllPasswords,
-              tooltip: 'Start Queue',
-            ),
-          ],
-        ],
+       actions: [
+  if (_isSelectionMode) ...[
+    if (_selectedUserIds.length == 1)
+      IconButton(
+        icon: const Icon(Icons.edit),
+        onPressed: _editSelectedUser,
+        tooltip: 'Edit User',
+      ),
+
+    // ⭐ COMMENT EDIT
+    if (_selectedUserIds.length == 1)
+      IconButton(
+        icon: const Icon(Icons.comment, color: Colors.blue),
+        tooltip: 'Edit Comment',
+        onPressed: _editUserComment,
+      ),
+
+    // ⭐ COMMENT DELETE
+    if (_selectedUserIds.length == 1)
+      IconButton(
+        icon: const Icon(Icons.delete_forever, color: Colors.orange),
+        tooltip: 'Remove Comment',
+        onPressed: _removeUserComment,
+      ),
+
+    IconButton(
+      icon: const Icon(Icons.delete, color: Colors.red),
+      onPressed: _deleteSelectedUsers,
+      tooltip: 'Delete',
+    ),
+    IconButton(
+      icon: Icon(_selectedUserIds.length == _room.users.length 
+          ? Icons.deselect 
+          : Icons.select_all),
+      onPressed: _selectedUserIds.length == _room.users.length
+          ? _deselectAllUsers
+          : _selectAllUsers,
+      tooltip: _selectedUserIds.length == _room.users.length 
+          ? 'Deselect All' 
+          : 'Select All',
+    ),
+    IconButton(
+      icon: const Icon(Icons.close),
+      onPressed: _deselectAllUsers,
+      tooltip: 'Cancel',
+    ),
+  ] else ...[
+    if (_isQueueActive && _queueUsers.isNotEmpty)
+      IconButton(
+        icon: const Icon(Icons.skip_next),
+        onPressed: () {
+          _nextUser();
+        },
+        tooltip: 'Next User (${_currentIndex + 1}/${_queueUsers.length})',
+      ),
+    IconButton(
+      icon: const Icon(Icons.play_arrow),
+      onPressed: _isQueueActive ? null : _sendAllPasswords,
+      tooltip: 'Start Queue',
+    ),
+  ],
+],
+
+
       ),
       body: Column(
         children: [
@@ -599,10 +736,21 @@ ScaffoldMessenger.of(context).showSnackBar(
                       ),
                     ),
                     if (user.voucherCode != null && user.voucherCode!.isNotEmpty)
-                      Text(
-                        'Password: ${user.voucherCode}',
-                        style: const TextStyle(fontSize: 12, color: Colors.indigo),
-                      ),
+  Text(
+    'Password: ${user.voucherCode}',
+    style: const TextStyle(fontSize: 12, color: Colors.indigo),
+  ),
+
+if ((user.comment ?? '').isNotEmpty)
+  Text(
+    'Note: ${user.comment}',
+    style: const TextStyle(
+      fontSize: 12,
+      color: Colors.orange,
+      fontStyle: FontStyle.italic,
+    ),
+  ),
+
                   ],
                 ),
               ),
@@ -625,10 +773,16 @@ ScaffoldMessenger.of(context).showSnackBar(
                   ),
                   const SizedBox(width: 8),
                   IconButton(
-                    icon: const Icon(Icons.send, color: Colors.green),
-                    onPressed: () => _sendUserPassword(user),
-                    tooltip: 'Send Password',
-                  ),
+  icon: Icon(
+    Icons.send,
+    color: user.isSentMarked ? Colors.blue : Colors.green,  // ⭐ NEW
+  ),
+  onPressed: () => _sendUserPassword(user),
+  tooltip: user.isSentMarked
+      ? 'Already Sent (tap to send again)'
+      : 'Send Password',
+),
+
                 ],
               ),
             ],

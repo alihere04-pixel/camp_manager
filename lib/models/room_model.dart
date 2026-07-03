@@ -8,8 +8,14 @@ class Room extends HiveObject {
   bool isFullyPaid;
   final DateTime createdAt;
   final DateTime updatedAt;
-  final int month;    // ✅ ADD
-  final int year;     // ✅ ADD
+  final int month;    
+  final int year;
+
+  // ⭐ NEW FIELD (CAMP NAME)
+  final String campName;
+
+  // ⭐ NEW FIELD (ALL USERS SENT)
+  bool allUsersSent;
 
   Room({
     required this.id,
@@ -18,14 +24,25 @@ class Room extends HiveObject {
     this.isFullyPaid = false,
     required this.createdAt,
     required this.updatedAt,
-    required this.month,   // ✅ ADD
-    required this.year,    // ✅ ADD
+    required this.month,
+    required this.year,
+
+    // ⭐ REQUIRED
+    required this.campName,
+
+    // ⭐ REQUIRED
+    this.allUsersSent = false,
   });
 
   int get totalUsers => users.length;
   int get paidUsers => users.where((u) => u.isPaid).length;
+
   bool get allUsersPaid =>
-    users.isNotEmpty && users.every((u) => u.isPaid);
+      users.isNotEmpty && users.every((u) => u.isPaid);
+
+  // ⭐ AUTO-CALCULATED GETTER (ALWAYS TRUE WHEN ALL USERS SENT)
+  bool get allUsersSentAuto =>
+      users.isNotEmpty && users.every((u) => u.isSentMarked);
 
   Room copyWith({
     String? id,
@@ -36,6 +53,12 @@ class Room extends HiveObject {
     DateTime? updatedAt,
     int? month,
     int? year,
+
+    // ⭐ NEW FIELD
+    String? campName,
+
+    // ⭐ NEW FIELD
+    bool? allUsersSent,
   }) {
     return Room(
       id: id ?? this.id,
@@ -46,6 +69,12 @@ class Room extends HiveObject {
       updatedAt: updatedAt ?? this.updatedAt,
       month: month ?? this.month,
       year: year ?? this.year,
+
+      // ⭐ NEW FIELD
+      campName: campName ?? this.campName,
+
+      // ⭐ NEW FIELD
+      allUsersSent: allUsersSent ?? this.allUsersSent,
     );
   }
 }
@@ -60,6 +89,7 @@ class RoomAdapter extends TypeAdapter<Room> {
     final fields = <int, dynamic>{
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
+
     return Room(
       id: fields[0] as String,
       roomNumber: fields[1] as String,
@@ -67,15 +97,21 @@ class RoomAdapter extends TypeAdapter<Room> {
       isFullyPaid: fields[3] as bool? ?? false,
       createdAt: fields[4] as DateTime? ?? DateTime.now(),
       updatedAt: fields[5] as DateTime? ?? DateTime.now(),
-      month: fields[6] as int? ?? DateTime.now().month,    // ✅ ADD
-      year: fields[7] as int? ?? DateTime.now().year,      // ✅ ADD
+      month: fields[6] as int? ?? DateTime.now().month,
+      year: fields[7] as int? ?? DateTime.now().year,
+
+      // ⭐ NEW FIELD
+      campName: fields[8] as String? ?? '',
+
+      // ⭐ NEW FIELD
+      allUsersSent: fields[9] as bool? ?? false,
     );
   }
 
   @override
   void write(BinaryWriter writer, Room obj) {
     writer
-      ..writeByte(8)  // ✅ 6 se 8 karo
+      ..writeByte(10) // ⭐ 9 → 10 fields
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -88,9 +124,17 @@ class RoomAdapter extends TypeAdapter<Room> {
       ..write(obj.createdAt)
       ..writeByte(5)
       ..write(obj.updatedAt)
-      ..writeByte(6)    // ✅ NAYA
-      ..write(obj.month)    // ✅ NAYA
-      ..writeByte(7)    // ✅ NAYA
-      ..write(obj.year);     // ✅ NAYA
+      ..writeByte(6)
+      ..write(obj.month)
+      ..writeByte(7)
+      ..write(obj.year)
+
+      // ⭐ NEW FIELD
+      ..writeByte(8)
+      ..write(obj.campName)
+
+      // ⭐ NEW FIELD
+      ..writeByte(9)
+      ..write(obj.allUsersSent);
   }
 }

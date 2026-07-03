@@ -3,8 +3,14 @@ import '../database/hive_database.dart';
 
 class MonthlySummaryScreen extends StatefulWidget {
   final DateTime currentMonth;
-  
-  const MonthlySummaryScreen({super.key, required this.currentMonth});
+final Map<String, dynamic> selectedCamp;   // ⭐ ADD
+
+const MonthlySummaryScreen({
+  super.key,
+  required this.currentMonth,
+  required this.selectedCamp,              // ⭐ ADD
+});
+
 
   @override
   State<MonthlySummaryScreen> createState() => _MonthlySummaryScreenState();
@@ -37,9 +43,11 @@ class _MonthlySummaryScreenState extends State<MonthlySummaryScreen> {
   Widget build(BuildContext context) {
     final allRooms = HiveDatabase.getRoomsBox().values.toList();
     final monthRooms = allRooms.where((room) {
-      return room.month == _currentMonth.month && 
-             room.year == _currentMonth.year;
-    }).toList();
+  return room.month == _currentMonth.month &&
+         room.year == _currentMonth.year &&
+         room.campName == widget.selectedCamp['campName'];   // ⭐ CAMP FILTER
+}).toList();
+
 
     final totalRooms = monthRooms.length;
     int totalUsers = 0;

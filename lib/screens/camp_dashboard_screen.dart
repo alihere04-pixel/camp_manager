@@ -11,17 +11,23 @@ import 'mikrotik_settings_screen.dart';
 import 'monthly_summary_screen.dart';  
 import '../services/mikrotik_service.dart'; 
 import '../services/settings_service.dart'; 
+import 'password_manager_screen.dart';
+
+
 
  
 
-class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+class CampDashboardScreen extends StatefulWidget {
+  final Map<String, dynamic> selectedCamp;
+
+  const CampDashboardScreen({super.key, required this.selectedCamp});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<CampDashboardScreen> createState() => _CampDashboardScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
+
+class _CampDashboardScreenState extends State<CampDashboardScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   bool _isLoading = false;
 bool _isMikroTikConnected = false;  // ✅ ADD
@@ -31,6 +37,7 @@ bool _isMikroTikConnected = false;  // ✅ ADD
   // ✅ SEARCH VARIABLES
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
+  bool _isSearchVisible = false;   // ⭐ NEW - STEP 2
   
   // ✅ MONTH VARIABLES
   DateTime _currentMonth = DateTime.now();
@@ -47,7 +54,16 @@ void initState() {
   });
   
   // ✅ SAVED STATUS LOAD KARO (FAST)
-  _isMikroTikConnected = SettingsService.mikrotikConnected;
+  // ⭐ LOAD CAMP-WISE MIKROTIK SETTINGS
+// ⭐ CAMP-WISE MIKROTIK SETTINGS APPLY KARO
+SettingsService.setMikrotikHost(widget.selectedCamp['host']);
+SettingsService.setMikrotikPort(widget.selectedCamp['port']);
+SettingsService.setMikrotikUser(widget.selectedCamp['user']);
+SettingsService.setMikrotikPass(widget.selectedCamp['pass']);
+SettingsService.setMikrotikUseSsl(widget.selectedCamp['ssl']);
+
+// ⭐ Ab fresh connection check karo
+_checkMikroTikStatus();
 
 
 }
@@ -92,46 +108,78 @@ Future<void> _refreshMikroTikIndicator() async {
     return months[safeMonth - 1];
   }
 
-  // ✅ COUNT FUNCTIONS
-  int _getRoomCount() {
-    final allRooms = HiveDatabase.getRoomsBox().values.toList();
-    final currentMonthRooms = allRooms.where((room) {
-      return room.month == _currentMonth.month && 
-             room.year == _currentMonth.year;
-    }).toList();
-    return currentMonthRooms.length;
-  }
+ int _getRoomCount() {
+  final allRooms = HiveDatabase.getRoomsBox().values.toList();
+
+  // ⭐ CAMP FILTER
+  final campRooms = allRooms.where((room) {
+    return room.campName == widget.selectedCamp['campName'];
+  }).toList();
+
+  // ⭐ MONTH FILTER
+  final currentMonthRooms = campRooms.where((room) {
+    return room.month == _currentMonth.month &&
+           room.year == _currentMonth.year;
+  }).toList();
+
+  return currentMonthRooms.length;
+}
+
 
   int _getUserCount() {
-    final allRooms = HiveDatabase.getRoomsBox().values.toList();
-    final currentMonthRooms = allRooms.where((room) {
-      return room.month == _currentMonth.month && 
-             room.year == _currentMonth.year;
-    }).toList();
-    int count = 0;
-    for (var room in currentMonthRooms) {
-      count += room.users.length;
-    }
-    return count;
+  final allRooms = HiveDatabase.getRoomsBox().values.toList();
+
+  final campRooms = allRooms.where((room) {
+    return room.campName == widget.selectedCamp['campName'];
+  }).toList();
+
+  final currentMonthRooms = campRooms.where((room) {
+    return room.month == _currentMonth.month &&
+           room.year == _currentMonth.year;
+  }).toList();
+
+  int count = 0;
+  for (var room in currentMonthRooms) {
+    count += room.users.length;
   }
+  return count;
+}
+
 
   int _getPaidCount() {
-    final allRooms = HiveDatabase.getRoomsBox().values.toList();
-    final currentMonthRooms = allRooms.where((room) {
-      return room.month == _currentMonth.month && 
-             room.year == _currentMonth.year;
-    }).toList();
-    return currentMonthRooms.where((r) => r.allUsersPaid).length;
-  }
+  final allRooms = HiveDatabase.getRoomsBox().values.toList();
 
-  int _getPendingCount() {
-    final allRooms = HiveDatabase.getRoomsBox().values.toList();
-    final currentMonthRooms = allRooms.where((room) {
-      return room.month == _currentMonth.month && 
-             room.year == _currentMonth.year;
-    }).toList();
-    return currentMonthRooms.where((r) => !r.allUsersPaid && r.users.isNotEmpty).length;
-  }
+  // ⭐ CAMP FILTER
+  final campRooms = allRooms.where((room) {
+    return room.campName == widget.selectedCamp['campName'];
+  }).toList();
+
+  // ⭐ MONTH FILTER
+  final currentMonthRooms = campRooms.where((room) {
+    return room.month == _currentMonth.month &&
+           room.year == _currentMonth.year;
+  }).toList();
+
+  return currentMonthRooms.where((r) => r.allUsersPaid).length;
+}
+
+int _getPendingCount() {
+  final allRooms = HiveDatabase.getRoomsBox().values.toList();
+
+  // ⭐ CAMP FILTER
+  final campRooms = allRooms.where((room) {
+    return room.campName == widget.selectedCamp['campName'];
+  }).toList();
+
+  // ⭐ MONTH FILTER
+  final currentMonthRooms = campRooms.where((room) {
+    return room.month == _currentMonth.month &&
+           room.year == _currentMonth.year;
+  }).toList();
+
+  return currentMonthRooms.where((r) => !r.allUsersPaid && r.users.isNotEmpty).length;
+}
+
 
   // ✅ BUILD TAB WITH COUNT
   Widget _buildTabWithCount(String label, int count) {
@@ -165,51 +213,7 @@ Future<void> _refreshMikroTikIndicator() async {
     }).toList();
   }
 
-  // ✅ SEARCH DIALOG FUNCTION
-  void _openSearchDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Search Room'),
-        content: TextField(
-          controller: _searchController,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'Enter room number...',
-            border: OutlineInputBorder(),
-            prefixIcon: Icon(Icons.search),
-          ),
-          onSubmitted: (value) {
-            setState(() {
-              _searchQuery = value;
-            });
-            Navigator.pop(context);
-          },
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              _searchController.clear();
-              setState(() {
-                _searchQuery = '';
-              });
-              Navigator.pop(context);
-            },
-            child: const Text('Clear'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              setState(() {
-                _searchQuery = _searchController.text;
-              });
-              Navigator.pop(context);
-            },
-            child: const Text('Search'),
-          ),
-        ],
-      ),
-    );
-  }
+  
  Future<void> _checkMikroTikStatus() async {
   try {
     final connected = await MikroTikService.checkConnection();
@@ -286,8 +290,11 @@ Future<void> _refreshMikroTikIndicator() async {
       final nextYear = _currentMonth.month == 12 ? _currentMonth.year + 1 : _currentMonth.year;
       
       final nextMonthRooms = allRooms.where((room) {
-        return room.month == nextMonth && room.year == nextYear;
-      }).toList();
+  return room.campName == widget.selectedCamp['campName'] &&
+         room.month == nextMonth &&
+         room.year == nextYear;
+}).toList();
+
       
       if (nextMonthRooms.isNotEmpty) {
         if (mounted) {
@@ -333,14 +340,18 @@ Future<void> _refreshMikroTikIndicator() async {
         }
         
         final newRoom = Room(
-          id: newRoomId,
-          roomNumber: oldRoom.roomNumber,
-          users: newUsers,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-          month: nextMonth,
-          year: nextYear,
-        );
+  id: newRoomId,
+  roomNumber: oldRoom.roomNumber,
+  users: newUsers,
+  createdAt: DateTime.now(),
+  updatedAt: DateTime.now(),
+  month: nextMonth,
+  year: nextYear,
+
+  // ⭐ MUST ADD THIS
+  campName: oldRoom.campName,
+);
+
         
         await roomsBox.put(newRoomId, newRoom);
         copiedRooms++;
@@ -549,10 +560,11 @@ ScaffoldMessenger.of(context).showSnackBar(
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'Room Billing',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
+        title: Text(
+  widget.selectedCamp['campName'],
+  style: const TextStyle(fontWeight: FontWeight.bold),
+),
+
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(60),
           child: Column(
@@ -616,59 +628,118 @@ ScaffoldMessenger.of(context).showSnackBar(
       onPressed: _deselectAllRooms,
     ),
   ] else ...[
-    IconButton(
-      icon: const Icon(Icons.search),
-      onPressed: _openSearchDialog,
-    ),
+   // ⭐ STEP 3: NEW SEARCH ICON (POPUP HATAYA)
+   IconButton(
+  icon: Icon(_isSearchVisible ? Icons.close : Icons.search),
+  onPressed: () {
+    setState(() {
+      _isSearchVisible = !_isSearchVisible;
+
+      if (!_isSearchVisible) {
+        _searchQuery = '';
+        _searchController.clear();
+      }
+    });
+  },
+),
+
     PopupMenuButton<String>(
       icon: const Icon(Icons.settings),
       onSelected: (value) {
-        if (value == 'mikrotik') {
-          _showSettingsDialog();
-        } else if (value == 'inventory') {
-          _openInventory();
-        } else if (value == 'summary') {
-          _openMonthlySummary();
-        }
-      },
-      itemBuilder: (context) => [
-        const PopupMenuItem(
-          value: 'mikrotik',
-          child: Row(
-            children: [
-              Icon(Icons.settings, size: 20, color: Colors.indigo),
-              SizedBox(width: 12),
-              Text('MikroTik Settings'),
-            ],
-          ),
-        ),
-        const PopupMenuItem(
-          value: 'inventory',
-          child: Row(
-            children: [
-              Icon(Icons.inventory_2_outlined, size: 20, color: Colors.teal),
-              SizedBox(width: 12),
-              Text('Voucher Inventory'),
-            ],
-          ),
-        ),
-        const PopupMenuItem(
-          value: 'summary',
-          child: Row(
-            children: [
-              Icon(Icons.summarize, size: 20, color: Colors.orange),
-              SizedBox(width: 12),
-              Text('Monthly Summary'),
-            ],
-          ),
-        ),
+  if (value == 'mikrotik') {
+    _showSettingsDialog();
+  } else if (value == 'inventory') {
+    _openInventory();
+  } else if (value == 'summary') {
+    _openMonthlySummary();
+  } 
+},
+
+
+     itemBuilder: (context) => [
+  const PopupMenuItem(
+    value: 'mikrotik',
+    child: Row(
+      children: [
+        Icon(Icons.settings, size: 20, color: Colors.indigo),
+        SizedBox(width: 12),
+        Text('MikroTik Settings'),
       ],
+    ),
+  ),
+  const PopupMenuItem(
+    value: 'inventory',
+    child: Row(
+      children: [
+        Icon(Icons.inventory_2_outlined, size: 20, color: Colors.teal),
+        SizedBox(width: 12),
+        Text('Voucher Inventory'),
+      ],
+    ),
+  ),
+  const PopupMenuItem(
+    value: 'summary',
+    child: Row(
+      children: [
+        Icon(Icons.summarize, size: 20, color: Colors.orange),
+        SizedBox(width: 12),
+        Text('Monthly Summary'),
+      ],
+    ),
+  ),
+
+ 
+],
+
     ),
   ],
 ],
+
+
+
       ),
+      
       body: Column(
+        
         children: [
+          // ⭐ STEP 4: SEARCH BAR ADD KIYA (SCREEN ME UPAR)
+          if (_isSearchVisible)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              color: Colors.white,
+              child: TextField(
+                controller: _searchController,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: 'Search by Room...',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() {
+                              _searchQuery = '';
+                            });
+                          },
+                        )
+                      : null,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                ),
+                onChanged: (value) {
+                  setState(() {
+                    _searchQuery = value;
+                  });
+                },
+              ),
+            ),
           // ✅ MONTH BAR WITH ARROWS
           Container(
   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -731,9 +802,15 @@ ScaffoldMessenger.of(context).showSnackBar(
               valueListenable: HiveDatabase.getRoomsBox().listenable(),
               builder: (context, Box<Room> box, _) {
                 final allRooms = box.values.toList();
+
+                // ⭐ CAMP-WISE FILTER
+final campRooms = allRooms.where((room) {
+  return room.campName == widget.selectedCamp['campName'];
+}).toList();
+
                 
                 // ✅ MONTH FILTER APPLY
-                final monthRooms = _filterRoomsByMonth(allRooms);
+                final monthRooms = _filterRoomsByMonth(campRooms);
                 final monthRoomsSorted = [...monthRooms];
 
 monthRoomsSorted.sort((a, b) {
@@ -968,7 +1045,9 @@ void _openUserDetail(User user) {
     );
   }
 }
+
   Widget _buildRoomsList(List<Room> rooms, {String emptyMessage = 'No rooms found'}) {
+    
     if (rooms.isEmpty && _searchQuery.isNotEmpty) {
       return Center(
         child: Column(
@@ -1125,13 +1204,18 @@ void _openUserDetail(User user) {
                     );
                   }).toList(),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.send, color: Colors.green, size: 18), // ✅ CHHOTA
-                  onPressed: () => _sendRoomPasswords(room),
-                  tooltip: 'Send All Passwords',
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
+               IconButton(
+  icon: Icon(
+    Icons.send,
+    color: room.allUsersSent ? Colors.blue : Colors.green,
+    size: 18,
+  ),
+  onPressed: () => _sendRoomPasswords(room),
+  tooltip: 'Send All Passwords',
+  padding: EdgeInsets.zero,
+  constraints: const BoxConstraints(),
+),
+
               ],
             ),
           ],
@@ -1262,18 +1346,25 @@ void _openMonthlySummary() {
   Navigator.push(
     context,
     MaterialPageRoute(
-      builder: (context) => MonthlySummaryScreen(currentMonth: _currentMonth),
+      builder: (_) => MonthlySummaryScreen(
+        currentMonth: _currentMonth,
+        selectedCamp: widget.selectedCamp,   // ⭐ MUST ADD
+      ),
     ),
   );
 }
 
+
   Future<void> _showSettingsDialog() async {
   await Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (context) => const MikrotikSettingsScreen(),
+  context,
+  MaterialPageRoute(
+    builder: (context) => MikrotikSettingsScreen(
+      campName: widget.selectedCamp['campName'],
     ),
-  );
+  ),
+);
+
 
   _checkMikroTikStatus();
 }
@@ -1282,7 +1373,11 @@ void _openMonthlySummary() {
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => AddRoomScreen(currentMonth: _currentMonth),
+        builder: (context) => AddRoomScreen(
+  currentMonth: _currentMonth,
+  selectedCamp: widget.selectedCamp,   // ⭐ MUST ADD
+),
+
       ),
     );
     if (result == true && mounted) {

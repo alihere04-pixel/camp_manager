@@ -5,8 +5,14 @@ import '../models/user_model.dart';
 
 class AddRoomScreen extends StatefulWidget {
   final DateTime currentMonth;
+  final Map<String, dynamic> selectedCamp;   // ⭐ ADD THIS
   
-  const AddRoomScreen({super.key, required this.currentMonth});
+  const AddRoomScreen({
+    super.key,
+    required this.currentMonth,
+    required this.selectedCamp,              // ⭐ ADD THIS
+  });
+
 
   @override
   State<AddRoomScreen> createState() => _AddRoomScreenState();
@@ -112,17 +118,20 @@ class _AddRoomScreenState extends State<AddRoomScreen> {
   }
   
   final roomId = DateTime.now().millisecondsSinceEpoch.toString();
-  
   final room = Room(
-    id: roomId,
-    roomNumber: roomNumber,
-    users: users,
-    isFullyPaid: false,
-    createdAt: now,
-    updatedAt: now,
-    month: widget.currentMonth.month,
-    year: widget.currentMonth.year,
-  );
+  id: roomId,
+  roomNumber: roomNumber,
+  users: users,
+  isFullyPaid: false,
+  createdAt: now,
+  updatedAt: now,
+  month: widget.currentMonth.month,
+  year: widget.currentMonth.year,
+
+  // ⭐ MUST ADD THIS
+  campName: widget.selectedCamp['campName'],
+);
+
   
   for (var user in users) {
     final updatedUser = user.copyWith(

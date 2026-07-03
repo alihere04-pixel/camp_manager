@@ -8,7 +8,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 
 class MikrotikSettingsScreen extends StatefulWidget {
-  const MikrotikSettingsScreen({super.key});
+  final String campName;
+
+  const MikrotikSettingsScreen({super.key, required this.campName});
 
   @override
   State<MikrotikSettingsScreen> createState() => _MikrotikSettingsScreenState();
@@ -115,6 +117,11 @@ bool _isLoadingSavedUsers = false;
       _availablePasswords = await MikroTikService.getAvailablePasswords(
         profile: profile,
       );
+
+      // ⭐ HAR PASSWORD ME CAMP NAME ADD KARO
+      for (var p in _availablePasswords) {
+        p['campName'] = widget.campName;
+      }
       
       // ✅ SAVE PASSWORDS FOR OFFLINE USE
       if (_availablePasswords.isNotEmpty) {
@@ -135,6 +142,11 @@ bool _isLoadingSavedUsers = false;
           _availablePasswords = decoded
               .map((e) => Map<String, dynamic>.from(e))
               .toList();
+
+          // ⭐ CAMP FILTER LAGAO (SIRF CURRENT CAMP KA DATA)
+          _availablePasswords = _availablePasswords.where((p) {
+            return p['campName'] == widget.campName;
+          }).toList();
         }
       }
     } catch (e) {
@@ -146,6 +158,11 @@ bool _isLoadingSavedUsers = false;
         _availablePasswords = decoded
             .map((e) => Map<String, dynamic>.from(e))
             .toList();
+
+        // ⭐ CAMP FILTER LAGAO (SIRF CURRENT CAMP KA DATA)
+        _availablePasswords = _availablePasswords.where((p) {
+          return p['campName'] == widget.campName;
+        }).toList();
       }
     }
     
@@ -317,7 +334,10 @@ InkWell(
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => const PasswordManagerScreen(),
+        builder: (context) => PasswordManagerScreen(
+  campName: widget.campName,
+),
+
       ),
     );
     _loadAvailablePasswords();

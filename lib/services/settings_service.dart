@@ -12,20 +12,53 @@ class SettingsService {
   static Box _getBox() => Hive.box(_boxName);
 
   // ============ MIKROTIK SETTINGS ============
- static String get mikrotikHost => _getBox().get('mikrotik_host', defaultValue: '') as String;
-  static String get mikrotikUser => _getBox().get('mikrotik_user', defaultValue: '') as String;
-  static String get mikrotikPass => _getBox().get('mikrotik_pass', defaultValue: '') as String;
-  static String get mikrotikPort => _getBox().get('mikrotik_port', defaultValue: '8081') as String;
-  static bool get mikrotikUseSsl => _getBox().get('mikrotik_use_ssl', defaultValue: false) as bool;
-  static String get mikrotikProfile => _getBox().get('mikrotik_profile', defaultValue: 'default') as String;
 
-static bool get mikrotikConnected =>
-    _getBox().get('mikrotik_connected', defaultValue: false) as bool;
+  static String get mikrotikHost =>
+      _getBox().get('mikrotik_host', defaultValue: '') as String;
 
+  static String get mikrotikUser =>
+      _getBox().get('mikrotik_user', defaultValue: '') as String;
 
-static Future<void> saveMikrotikConnected(bool value) async {
-  await _getBox().put('mikrotik_connected', value);
-}
+  static String get mikrotikPass =>
+      _getBox().get('mikrotik_pass', defaultValue: '') as String;
+
+  static String get mikrotikPort =>
+      _getBox().get('mikrotik_port', defaultValue: '8081') as String;
+
+  static bool get mikrotikUseSsl =>
+      _getBox().get('mikrotik_use_ssl', defaultValue: false) as bool;
+
+  static String get mikrotikProfile =>
+      _getBox().get('mikrotik_profile', defaultValue: 'default') as String;
+
+  static bool get mikrotikConnected =>
+      _getBox().get('mikrotik_connected', defaultValue: false) as bool;
+
+  static Future<void> saveMikrotikConnected(bool value) async {
+    await _getBox().put('mikrotik_connected', value);
+  }
+
+  // ⭐ NEW FUNCTIONS (CAMP-WISE SETTINGS)
+  static Future<void> setMikrotikHost(String value) async {
+    await _getBox().put('mikrotik_host', value);
+  }
+
+  static Future<void> setMikrotikPort(String value) async {
+    await _getBox().put('mikrotik_port', value);
+  }
+
+  static Future<void> setMikrotikUser(String value) async {
+    await _getBox().put('mikrotik_user', value);
+  }
+
+  static Future<void> setMikrotikPass(String value) async {
+    await _getBox().put('mikrotik_pass', value);
+  }
+
+  static Future<void> setMikrotikUseSsl(bool value) async {
+    await _getBox().put('mikrotik_use_ssl', value);
+  }
+
   static Future<void> saveMikrotikSettings({
     required String host,
     required String user,
@@ -46,28 +79,34 @@ static Future<void> saveMikrotikConnected(bool value) async {
   }
 
   // ============ PASSWORD SETTINGS ============
-  static int get passwordLength => _getBox().get('password_length', defaultValue: 8) as int;
-  static String get passwordType => _getBox().get('password_type', defaultValue: 'mix') as String;
 
-static String get passwordPrefix =>
-    _getBox().get('password_prefix', defaultValue: 'None') as String;
+  static int get passwordLength =>
+      _getBox().get('password_length', defaultValue: 8) as int;
+
+  static String get passwordType =>
+      _getBox().get('password_type', defaultValue: 'mix') as String;
+
+  static String get passwordPrefix =>
+      _getBox().get('password_prefix', defaultValue: 'None') as String;
 
   static Future<void> savePasswordSettings({
-  required int length,
-  required String type,
-  required String prefix,
-}) async {
-  final box = _getBox();
-  await box.put('password_length', length);
-  await box.put('password_type', type);
-  await box.put('password_prefix', prefix);
-}
+    required int length,
+    required String type,
+    required String prefix,
+  }) async {
+    final box = _getBox();
+    await box.put('password_length', length);
+    await box.put('password_type', type);
+    await box.put('password_prefix', prefix);
+  }
 
   // ============ WHATSAPP SETTINGS ============
+
   static String get whatsappMessageTemplate => _getBox().get(
-    'whatsapp_template', 
-    defaultValue: 'Internet Password\n\nName: {name}\nUsername: {username}\nPassword: {password}',
-  ) as String;
+        'whatsapp_template',
+        defaultValue:
+            'Internet Password\n\nName: {name}\nUsername: {username}\nPassword: {password}',
+      ) as String;
 
   static Future<void> saveWhatsappTemplate(String template) async {
     await _getBox().put('whatsapp_template', template);
