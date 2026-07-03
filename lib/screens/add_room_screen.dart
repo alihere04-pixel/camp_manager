@@ -332,20 +332,7 @@ class _AddRoomScreenState extends State<AddRoomScreen> {
                 
                 const SizedBox(height: 100),
                 
-                // Create Room Button
-                ElevatedButton(
-                  onPressed: _saveRoom,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.indigo,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: const Text('Create Room', style: TextStyle(fontSize: 16)),
-                ),
-                const SizedBox(height: 20),
+               
               ],
             ),
             
@@ -361,6 +348,25 @@ class _AddRoomScreenState extends State<AddRoomScreen> {
                 child: const Icon(Icons.person_add, color: Colors.white),
               ),
             ),
+                        // ⭐ FIXED CREATE ROOM BUTTON
+            Positioned(
+              bottom: 90,
+              left: 20,
+              right: 20,
+              child: ElevatedButton(
+                onPressed: _saveRoom,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.indigo,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text('Create Room', style: TextStyle(fontSize: 16)),
+              ),
+            ),
+
           ],
         ),
       ),

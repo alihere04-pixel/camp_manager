@@ -14,7 +14,7 @@ class _AddCampScreenState extends State<AddCampScreen> {
 
   final TextEditingController _campName = TextEditingController();
   final TextEditingController _host = TextEditingController();
-  final TextEditingController _port = TextEditingController(text: "8728");
+  final TextEditingController _port = TextEditingController();   // ⭐ EMPTY NOW
   final TextEditingController _user = TextEditingController();
   final TextEditingController _pass = TextEditingController();
 
@@ -25,10 +25,10 @@ class _AddCampScreenState extends State<AddCampScreen> {
 
     final camp = {
       "campName": _campName.text.trim(),
-      "host": _host.text.trim(),     // optional
-      "port": _port.text.trim(),     // optional
-      "user": _user.text.trim(),     // optional
-      "pass": _pass.text.trim(),     // optional
+      "host": _host.text.trim(),
+      "port": _port.text.trim(),
+      "user": _user.text.trim(),
+      "pass": _pass.text.trim(),
       "ssl": _useSsl,
     };
 
@@ -44,8 +44,9 @@ class _AddCampScreenState extends State<AddCampScreen> {
         padding: const EdgeInsets.all(16),
         child: Form(
           key: _formKey,
-          child: ListView(
+          child: Column(
             children: [
+
               // ⭐ REQUIRED ONLY THIS FIELD
               TextFormField(
                 controller: _campName,
@@ -58,70 +59,80 @@ class _AddCampScreenState extends State<AddCampScreen> {
 
               const SizedBox(height: 12),
 
-              // ⭐ OPTIONAL
-              TextFormField(
-                controller: _host,
-                decoration: const InputDecoration(
-                  labelText: "MikroTik Host (Optional)",
-                  hintText: "192.168.88.1",
-                  border: OutlineInputBorder(),
+              Expanded(
+                child: ListView(
+                  children: [
+                    // ⭐ OPTIONAL
+                    TextFormField(
+                      controller: _host,
+                      decoration: const InputDecoration(
+                        labelText: "MikroTik Host (Optional)",
+                        hintText: "192.168.88.1",
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // ⭐ OPTIONAL — EMPTY PORT
+                    TextFormField(
+                      controller: _port,
+                      decoration: const InputDecoration(
+                        labelText: "Port (Optional)",
+                        hintText: "8728 / 8729",
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // ⭐ OPTIONAL
+                    TextFormField(
+                      controller: _user,
+                      decoration: const InputDecoration(
+                        labelText: "Username (Optional)",
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // ⭐ OPTIONAL
+                    TextFormField(
+                      controller: _pass,
+                      decoration: const InputDecoration(
+                        labelText: "Password (Optional)",
+                        border: OutlineInputBorder(),
+                      ),
+                      obscureText: true,
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    SwitchListTile(
+                      title: const Text("Use SSL (HTTPS)"),
+                      subtitle: Text(_useSsl ? "Port 8729" : "Port 8728"),
+                      value: _useSsl,
+                      onChanged: (v) {
+                        setState(() {
+                          _useSsl = v;
+                          // ⭐ SSL toggle does NOT auto-fill port now
+                        });
+                      },
+                    ),
+                  ],
                 ),
               ),
 
               const SizedBox(height: 12),
 
-              // ⭐ OPTIONAL
-              TextFormField(
-                controller: _port,
-                decoration: const InputDecoration(
-                  labelText: "Port (Optional)",
-                  hintText: "8728 / 8729",
-                  border: OutlineInputBorder(),
+              // ⭐ BUTTON ALWAYS VISIBLE — NO SCROLL NEEDED
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _saveCamp,
+                  child: const Text("Save Camp"),
                 ),
-              ),
-
-              const SizedBox(height: 12),
-
-              // ⭐ OPTIONAL
-              TextFormField(
-                controller: _user,
-                decoration: const InputDecoration(
-                  labelText: "Username (Optional)",
-                  border: OutlineInputBorder(),
-                ),
-              ),
-
-              const SizedBox(height: 12),
-
-              // ⭐ OPTIONAL
-              TextFormField(
-                controller: _pass,
-                decoration: const InputDecoration(
-                  labelText: "Password (Optional)",
-                  border: OutlineInputBorder(),
-                ),
-                obscureText: true,
-              ),
-
-              const SizedBox(height: 12),
-
-              SwitchListTile(
-                title: const Text("Use SSL (HTTPS)"),
-                subtitle: Text(_useSsl ? "Port 8729" : "Port 8728"),
-                value: _useSsl,
-                onChanged: (v) {
-                  setState(() {
-                    _useSsl = v;
-                    _port.text = v ? "8729" : "8728";
-                  });
-                },
-              ),
-
-              const SizedBox(height: 20),
-
-              ElevatedButton(
-                onPressed: _saveCamp,
-                child: const Text("Save Camp"),
               ),
             ],
           ),

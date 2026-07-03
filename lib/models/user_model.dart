@@ -12,7 +12,8 @@ class User extends HiveObject {
   int passwordCount;
   double amount;  // ✅ ADDED
   bool isSentMarked;     // password sent mark
-String? comment;       // user note/comment
+  String? comment;       // user note/comment
+  bool isActive;         // ⭐ ACTIVE / INACTIVE USER
 
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -34,6 +35,7 @@ String? comment;       // user note/comment
   // ⭐ NEW FIELDS
   this.isSentMarked = false,
   this.comment,
+  this.isActive = true,   // ⭐ DEFAULT ACTIVE
 });
 
 
@@ -59,6 +61,7 @@ String? comment;       // user note/comment
   // ⭐ NEW FIELDS
   bool? isSentMarked,
   String? comment,
+  bool? isActive,
 }) {
   return User(
     id: id ?? this.id,
@@ -77,6 +80,7 @@ String? comment;       // user note/comment
     // ⭐ NEW FIELDS
     isSentMarked: isSentMarked ?? this.isSentMarked,
     comment: comment ?? this.comment,
+    isActive: isActive ?? this.isActive,
   );
 }
 
@@ -110,13 +114,14 @@ User read(BinaryReader reader) {
     // ⭐ NEW FIELDS
     isSentMarked: fields[12] as bool? ?? false,
     comment: fields[13] as String?,
+    isActive: fields[14] as bool? ?? true,
   );
 }
 
   @override
   void write(BinaryWriter writer, User obj) {
    writer
-  ..writeByte(14)  // ⭐ 12 → 14 (2 new fields)
+  ..writeByte(15)  // ⭐ 14 → 15 (1 new field added)
   ..writeByte(0)
   ..write(obj.id)
   ..writeByte(1)
@@ -146,7 +151,9 @@ User read(BinaryReader reader) {
   ..writeByte(12)
   ..write(obj.isSentMarked)
   ..writeByte(13)
-  ..write(obj.comment);
+  ..write(obj.comment)
+  ..writeByte(14)
+  ..write(obj.isActive);
 
   }
 }

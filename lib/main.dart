@@ -36,12 +36,12 @@ void main() async {
 
   // ⭐ MIGRATE OLD ROOMS → DEFAULT CAMP
   final roomsBox = HiveDatabase.getRoomsBox();
-  final usersBox = HiveDatabase.getUsersBox();
+ // final usersBox = HiveDatabase.getUsersBox();
 
   final allRooms = roomsBox.values.toList();
 
   for (var room in allRooms) {
-    if (room.campName == null || room.campName.isEmpty) {
+    if (room.campName.isEmpty) {
       final updatedRoom = room.copyWith(
         campName: "My Camp",
       );

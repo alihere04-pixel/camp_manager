@@ -11,7 +11,6 @@ import 'mikrotik_settings_screen.dart';
 import 'monthly_summary_screen.dart';  
 import '../services/mikrotik_service.dart'; 
 import '../services/settings_service.dart'; 
-import 'password_manager_screen.dart';
 
 
 
@@ -140,7 +139,7 @@ Future<void> _refreshMikroTikIndicator() async {
 
   int count = 0;
   for (var room in currentMonthRooms) {
-    count += room.users.length;
+    count += room.users.where((u) => u.isActive).length;   // ⭐ ACTIVE ONLY
   }
   return count;
 }
@@ -160,7 +159,11 @@ Future<void> _refreshMikroTikIndicator() async {
            room.year == _currentMonth.year;
   }).toList();
 
-  return currentMonthRooms.where((r) => r.allUsersPaid).length;
+  return currentMonthRooms.where((r) {
+  final activeUsers = r.users.where((u) => u.isActive).toList();
+  if (activeUsers.isEmpty) return false;
+  return activeUsers.every((u) => u.isPaid);   // ⭐ ACTIVE USERS ONLY
+}).length;
 }
 
 int _getPendingCount() {
@@ -177,7 +180,11 @@ int _getPendingCount() {
            room.year == _currentMonth.year;
   }).toList();
 
-  return currentMonthRooms.where((r) => !r.allUsersPaid && r.users.isNotEmpty).length;
+  return currentMonthRooms.where((r) {
+  final activeUsers = r.users.where((u) => u.isActive).toList();
+  if (activeUsers.isEmpty) return false;
+  return activeUsers.any((u) => !u.isPaid);   // ⭐ ACTIVE USERS ONLY
+}).length;
 }
 
 
@@ -253,11 +260,17 @@ int _getPendingCount() {
             onPressed: () => Navigator.pop(context, false),
             child: const Text('Cancel'),
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.indigo),
-            child: const Text('Copy'),
-          ),
+          TextButton(
+  onPressed: () => Navigator.pop(context, true),
+  child: const Text(
+    'Copy',
+    style: TextStyle(
+      color: Colors.indigo,
+      fontWeight: FontWeight.bold,
+    ),
+  ),
+),
+
         ],
       ),
     );
@@ -272,9 +285,11 @@ int _getPendingCount() {
       final roomsBox = HiveDatabase.getRoomsBox();
       
       final currentRooms = allRooms.where((room) {
-        return room.month == _currentMonth.month && 
-               room.year == _currentMonth.year;
-      }).toList();
+  return room.campName == widget.selectedCamp['campName'] &&
+         room.month == _currentMonth.month &&
+         room.year == _currentMonth.year;
+}).toList();
+
       
       if (currentRooms.isEmpty) {
         if (mounted) {
@@ -927,9 +942,11 @@ final filteredPendingRooms =
               children: [
                 // Avatar (Paid/Unpaid toggle)
                 GestureDetector(
-                  onTap: () => _toggleUserPaidFromUsersTab(user),
+                  onTap: user.isActive ? () => _toggleUserPaidFromUsersTab(user) : null,
                   child: CircleAvatar(
-                    backgroundColor: user.isPaid ? Colors.green : Colors.orange,
+                    backgroundColor: user.isActive
+    ? (user.isPaid ? Colors.green : Colors.orange)
+    : Colors.grey[400],   // ⭐ INACTIVE GREY
                     radius: 20,
                     child: Text(
                       user.initial,
@@ -1315,29 +1332,63 @@ void _openUserDetail(User user) {
   }
 
   Future<void> _sendRoomPasswords(Room room) async {
-    setState(() => _isLoading = true);
-    
-    final result = await WhatsAppService.sendPasswordsToUsers(room.users);
-    
-    setState(() => _isLoading = false);
-    
-    if (mounted) {
-      String message;
-      if (result['sent'] > 0) {
-        message = 'Sent: ${result['sent']}/${result['total']}\n'
-                  '📄 PDF: ${result['pdfCount']}  |  📡 MikroTik: ${result['mikrotikCount']}';
-        if (result['failed'] > 0) {
-          message += '\n❌ Failed: ${result['failed']} (${result['failedUsers'].join(", ")})';
-        }
-      } else {
-        message = '❌ No vouchers available!\nPlease import PDF first.';
-      }
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message), duration: const Duration(seconds: 3)),
-      );
-    }
+  setState(() => _isLoading = true);
+
+  final usersBox = HiveDatabase.getUsersBox();
+  final roomsBox = HiveDatabase.getRoomsBox();
+
+  // ⭐ SEND ALL USERS
+  final result = await WhatsAppService.sendPasswordsToUsers(room.users);
+
+  // ⭐ MARK EACH USER AS SENT
+  for (final user in room.users) {
+    final updatedUser = user.copyWith(
+      isSentMarked: true,
+      updatedAt: DateTime.now(),
+    );
+    await usersBox.put(updatedUser.id, updatedUser);
   }
+
+  // ⭐ REFRESH USERS FROM DATABASE
+  final refreshedUsers = room.users.map((u) {
+    return usersBox.get(u.id) ?? u;
+  }).toList();
+
+  // ⭐ CHECK IF ALL USERS ARE SENT
+  final allSent = refreshedUsers.every((u) => u.isSentMarked);
+
+  // ⭐ UPDATE ROOM STATUS
+  final updatedRoom = room.copyWith(
+    users: refreshedUsers,
+    allUsersSent: allSent,
+    updatedAt: DateTime.now(),
+  );
+
+  await roomsBox.put(updatedRoom.id, updatedRoom);
+
+  setState(() => _isLoading = false);
+
+  // ⭐ UI REFRESH
+  setState(() {});
+
+  // ⭐ SNACKBAR (same as your old code)
+  if (mounted) {
+    String message;
+    if (result['sent'] > 0) {
+      message = 'Sent: ${result['sent']}/${result['total']}\n'
+                '📄 PDF: ${result['pdfCount']}  |  📡 MikroTik: ${result['mikrotikCount']}';
+      if (result['failed'] > 0) {
+        message += '\n❌ Failed: ${result['failed']} (${result['failedUsers'].join(", ")})';
+      }
+    } else {
+      message = '❌ No vouchers available!\nPlease import PDF first.';
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), duration: const Duration(seconds: 3)),
+    );
+  }
+}
 
   void _openInventory() {
     Navigator.pushNamed(context, '/inventory');

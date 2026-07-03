@@ -108,9 +108,53 @@ class _RoomDetailScreenState extends State<RoomDetailScreen> {
         _room = updatedRoom;
       });
     }
-    
-    
   }
+Future<void> _toggleActiveStatus() async {
+  if (_selectedUserIds.length != 1) return;
+
+  final userId = _selectedUserIds.first;
+  final user = _room.users.firstWhere((u) => u.id == userId);
+
+  final confirm = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(user.isActive ? 'Mark Inactive' : 'Mark Active'),
+      content: Text(
+        user.isActive
+            ? 'Do you want to mark ${user.name} as INACTIVE?'
+            : 'Do you want to mark ${user.name} as ACTIVE?',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: Text(
+            user.isActive ? 'Mark Inactive' : 'Mark Active',
+            style: const TextStyle(color: Colors.indigo, fontWeight: FontWeight.bold),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  if (confirm != true) return;
+
+  final userBox = HiveDatabase.getUsersBox();
+  final existingUser = userBox.get(user.id);
+
+  if (existingUser != null) {
+    final updatedUser = existingUser.copyWith(
+      isActive: !existingUser.isActive,
+      updatedAt: DateTime.now(),
+    );
+    await userBox.put(updatedUser.id, updatedUser);
+    await _refreshRoom();
+  }
+}
+
 
   Future<void> _editSelectedUser() async {
     if (_selectedUserIds.length != 1) {
@@ -404,33 +448,47 @@ Future<void> _removeUserComment() async {
     }
   }
 
-  void _nextUser() {
+  Future<void> _nextUser() async {
     if (!mounted) return;
     
     _currentIndex++;
     
 
     if (_currentIndex >= _queueUsers.length) {
-      _resetQueue();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('✅ Queue Finished!')),
-        );
+  _resetQueue();
+  if (mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('✅ Queue Finished!')),
+    );
 
-        // ⭐ AUTO UPDATE ROOM SEND STATUS (BULK QUEUE)
-        final roomBox = HiveDatabase.getRoomsBox();
-        final freshRoom = roomBox.get(_room.id);
+    // ⭐ AUTO UPDATE ROOM SEND STATUS (BULK QUEUE)
+    final roomBox = HiveDatabase.getRoomsBox();
+    final userBox = HiveDatabase.getUsersBox();
+    final freshRoom = roomBox.get(_room.id);
 
-        if (freshRoom != null) {
-          final allSent = freshRoom.users.every((u) => u.isSentMarked);
-          final updatedRoom = freshRoom.copyWith(allUsersSent: allSent);
-          roomBox.put(updatedRoom.id, updatedRoom);
+    if (freshRoom != null) {
+      // ⭐ REFRESH USERS FROM DATABASE
+      final refreshedUsers = freshRoom.users.map((u) {
+        return userBox.get(u.id) ?? u;
+      }).toList();
 
-          setState(() => _room = updatedRoom);
-        }
-      }
-      return;
+      // ⭐ CHECK IF ALL USERS ARE SENT
+      final allSent = refreshedUsers.every((u) => u.isSentMarked);
+
+      // ⭐ UPDATE ROOM STATUS
+      final updatedRoom = freshRoom.copyWith(
+        users: refreshedUsers,
+        allUsersSent: allSent,
+      );
+
+      await roomBox.put(updatedRoom.id, updatedRoom);
+
+      setState(() => _room = updatedRoom);
     }
+  }
+  return;
+}
+
 
     setState(() {});
     _openCurrentUser();
@@ -532,6 +590,17 @@ Future<void> _removeUserComment() async {
         onPressed: _editSelectedUser,
         tooltip: 'Edit User',
       ),
+          if (_selectedUserIds.length == 1)
+      IconButton(
+        icon: const Icon(Icons.person),
+        onPressed: _toggleActiveStatus,
+        tooltip: _room.users
+                .firstWhere((u) => u.id == _selectedUserIds.first)
+                .isActive
+            ? 'Mark Inactive'
+            : 'Mark Active',
+      ),
+
 
     // ⭐ COMMENT EDIT
     if (_selectedUserIds.length == 1)
@@ -664,11 +733,13 @@ Future<void> _removeUserComment() async {
       ),
       child: InkWell(
         onLongPress: () => _toggleUserSelection(user.id),
-        onTap: () {
-          if (_isSelectionMode) {
-            _toggleUserSelection(user.id);
-          }
-        },
+       onTap: () {
+  if (!user.isActive) return;   // ⭐ INACTIVE → NO TAP
+  if (_isSelectionMode) {
+    _toggleUserSelection(user.id);
+  }
+},
+
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -688,18 +759,23 @@ Future<void> _removeUserComment() async {
                   width: 50,
                   height: 50,
                   decoration: BoxDecoration(
-                    color: user.isPaid ? Colors.green : Colors.grey[300],
+                    color: user.isActive
+    ? (user.isPaid ? Colors.green : Colors.grey[300])
+    : Colors.grey[400],
                     shape: BoxShape.circle,
                   ),
                   child: Center(
                     child: Text(
-                      user.initial,
-                      style: TextStyle(
-                        color: user.isPaid ? Colors.white : Colors.black54,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+  user.initial,
+  style: TextStyle(
+    color: user.isActive
+        ? (user.isPaid ? Colors.white : Colors.black54)
+        : Colors.black26,
+    fontSize: 20,
+    fontWeight: FontWeight.bold,
+  ),
+),
+
                   ),
                 ),
               ),
@@ -777,7 +853,7 @@ if ((user.comment ?? '').isNotEmpty)
     Icons.send,
     color: user.isSentMarked ? Colors.blue : Colors.green,  // ⭐ NEW
   ),
-  onPressed: () => _sendUserPassword(user),
+  onPressed: user.isActive ? () => _sendUserPassword(user) : null,
   tooltip: user.isSentMarked
       ? 'Already Sent (tap to send again)'
       : 'Send Password',
