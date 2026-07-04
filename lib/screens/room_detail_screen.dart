@@ -265,6 +265,12 @@ ScaffoldMessenger.of(context).showSnackBar(
   }
 
  Future<void> _sendUserPassword(User user) async {
+  if (!user.isActive) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Inactive user — cannot send password')),
+    );
+    return;
+  }
   // ⭐ Direct send — no comment dialog
   final result = await WhatsAppService.sendPasswordToUser(user);
 
@@ -398,9 +404,7 @@ Future<void> _removeUserComment() async {
 
   void _openCurrentUser() async {
     if (!mounted) return;
-    
-    final bool isLastUser = (_currentIndex + 1) >= _queueUsers.length;
-    
+
     if (_currentIndex >= _queueUsers.length) {
       _resetQueue();
       if (mounted) {
@@ -412,7 +416,15 @@ Future<void> _removeUserComment() async {
     }
 
     final user = _queueUsers[_currentIndex];
-    
+    final bool isLastUser = (_currentIndex + 1) >= _queueUsers.length;
+
+    // ⭐ INACTIVE USER KO SKIP KARO
+    if (!user.isActive) {
+      _currentIndex++;
+      _openCurrentUser();
+      return;
+    }
+
     if (user.voucherCode == null || user.voucherCode!.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -423,10 +435,9 @@ Future<void> _removeUserComment() async {
       _openCurrentUser();
       return;
     }
-    
-    
+
     await WhatsAppService.sendPasswordToUser(user);
-    
+
     if (isLastUser) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
@@ -439,10 +450,7 @@ Future<void> _removeUserComment() async {
     } else {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          setState(() {
-            
-          });
-          
+          setState(() {});
         }
       });
     }
@@ -499,7 +507,6 @@ Future<void> _removeUserComment() async {
     final freshRoom = roomBox.get(_room.id);
 
     if (freshRoom == null) {
-      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Room not found!')),
@@ -520,23 +527,21 @@ Future<void> _removeUserComment() async {
         ? users.where((u) => _selectedUserIds.contains(u.id)).toList()
         : users;
 
-    
-    
+    // ⭐ INACTIVE USERS KO QUEUE SE HATAO
+    final activeUsers = sourceUsers.where((u) => u.isActive).toList();
 
     if (!mounted) return;
-    
+
     setState(() {
-      _queueUsers = sourceUsers;
+      _queueUsers = activeUsers;
       _currentIndex = 0;
       _isQueueActive = _queueUsers.isNotEmpty;
     });
 
-    
-
     if (_queueUsers.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No users to process')),
+          const SnackBar(content: Text('No active users to process')),
         );
       }
       return;
@@ -550,7 +555,7 @@ Future<void> _removeUserComment() async {
   double _getCollectedAmount() {
     double total = 0;
     for (var user in _room.users) {
-      if (user.isPaid) {
+      if (user.isPaid && user.isActive) {
         total += user.amount;
       }
     }
@@ -560,7 +565,9 @@ Future<void> _removeUserComment() async {
   double _getTotalAmount() {
     double total = 0;
     for (var user in _room.users) {
-      total += user.amount;
+      if (user.isActive) {
+        total += user.amount;
+      }
     }
     return total;
   }
@@ -571,138 +578,153 @@ Future<void> _removeUserComment() async {
 
   // ============ BUILD METHODS ============
 
-  @override
+   @override
   Widget build(BuildContext context) {
-   
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          _isQueueActive
-              ? '${_room.roomNumber} (${_currentIndex + 1}/${_queueUsers.length})'
-              : _room.roomNumber,
+    return WillPopScope(
+      onWillPop: () async {
+        _resetQueue();
+        _resetSelectionMode();
+        return true;
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(
+            _isQueueActive
+                ? '${_room.roomNumber} (${_currentIndex + 1}/${_queueUsers.length})'
+                : _room.roomNumber,
+          ),
+          actions: [
+            if (_isSelectionMode) ...[
+              if (_selectedUserIds.length == 1)
+                IconButton(
+                  icon: const Icon(Icons.edit),
+                  onPressed: _editSelectedUser,
+                  tooltip: 'Edit User',
+                ),
+              if (_selectedUserIds.length == 1)
+                IconButton(
+                  icon: const Icon(Icons.person),
+                  onPressed: _toggleActiveStatus,
+                  tooltip: _room.users
+                          .firstWhere((u) => u.id == _selectedUserIds.first)
+                          .isActive
+                      ? 'Mark Inactive'
+                      : 'Mark Active',
+                ),
+              if (_selectedUserIds.length == 1)
+                IconButton(
+                  icon: const Icon(Icons.comment, color: Colors.blue),
+                  tooltip: 'Edit Comment',
+                  onPressed: _editUserComment,
+                ),
+              if (_selectedUserIds.length == 1)
+                IconButton(
+                  icon: const Icon(Icons.delete_forever, color: Colors.orange),
+                  tooltip: 'Remove Comment',
+                  onPressed: _removeUserComment,
+                ),
+              IconButton(
+                icon: const Icon(Icons.delete, color: Colors.red),
+                onPressed: _deleteSelectedUsers,
+                tooltip: 'Delete',
+              ),
+              IconButton(
+                icon: Icon(
+                  _selectedUserIds.length == _room.users.length
+                      ? Icons.deselect
+                      : Icons.select_all,
+                ),
+                onPressed: _selectedUserIds.length == _room.users.length
+                    ? _deselectAllUsers
+                    : _selectAllUsers,
+                tooltip: _selectedUserIds.length == _room.users.length
+                    ? 'Deselect All'
+                    : 'Select All',
+              ),
+              IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: _deselectAllUsers,
+                tooltip: 'Cancel',
+              ),
+            ] else ...[
+              if (_isQueueActive && _queueUsers.isNotEmpty)
+                IconButton(
+                  icon: const Icon(Icons.skip_next),
+                  onPressed: _nextUser,
+                  tooltip:
+                      'Next User (${_currentIndex + 1}/${_queueUsers.length})',
+                ),
+              IconButton(
+                icon: const Icon(Icons.play_arrow),
+                onPressed: _isQueueActive ? null : _sendAllPasswords,
+                tooltip: 'Start Queue',
+              ),
+            ],
+          ],
         ),
-       actions: [
-  if (_isSelectionMode) ...[
-    if (_selectedUserIds.length == 1)
-      IconButton(
-        icon: const Icon(Icons.edit),
-        onPressed: _editSelectedUser,
-        tooltip: 'Edit User',
-      ),
-          if (_selectedUserIds.length == 1)
-      IconButton(
-        icon: const Icon(Icons.person),
-        onPressed: _toggleActiveStatus,
-        tooltip: _room.users
-                .firstWhere((u) => u.id == _selectedUserIds.first)
-                .isActive
-            ? 'Mark Inactive'
-            : 'Mark Active',
-      ),
-
-
-    // ⭐ COMMENT EDIT
-    if (_selectedUserIds.length == 1)
-      IconButton(
-        icon: const Icon(Icons.comment, color: Colors.blue),
-        tooltip: 'Edit Comment',
-        onPressed: _editUserComment,
-      ),
-
-    // ⭐ COMMENT DELETE
-    if (_selectedUserIds.length == 1)
-      IconButton(
-        icon: const Icon(Icons.delete_forever, color: Colors.orange),
-        tooltip: 'Remove Comment',
-        onPressed: _removeUserComment,
-      ),
-
-    IconButton(
-      icon: const Icon(Icons.delete, color: Colors.red),
-      onPressed: _deleteSelectedUsers,
-      tooltip: 'Delete',
-    ),
-    IconButton(
-      icon: Icon(_selectedUserIds.length == _room.users.length 
-          ? Icons.deselect 
-          : Icons.select_all),
-      onPressed: _selectedUserIds.length == _room.users.length
-          ? _deselectAllUsers
-          : _selectAllUsers,
-      tooltip: _selectedUserIds.length == _room.users.length 
-          ? 'Deselect All' 
-          : 'Select All',
-    ),
-    IconButton(
-      icon: const Icon(Icons.close),
-      onPressed: _deselectAllUsers,
-      tooltip: 'Cancel',
-    ),
-  ] else ...[
-    if (_isQueueActive && _queueUsers.isNotEmpty)
-      IconButton(
-        icon: const Icon(Icons.skip_next),
-        onPressed: () {
-          _nextUser();
-        },
-        tooltip: 'Next User (${_currentIndex + 1}/${_queueUsers.length})',
-      ),
-    IconButton(
-      icon: const Icon(Icons.play_arrow),
-      onPressed: _isQueueActive ? null : _sendAllPasswords,
-      tooltip: 'Start Queue',
-    ),
-  ],
-],
-
-
-      ),
-      body: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            color: Colors.indigo[50],
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildStat('Users', _room.totalUsers.toString()),
-                _buildStat('Pending', (_room.totalUsers - _room.paidUsers).toString()),
-                _buildStat('Collected', _getCollectedAmount().toStringAsFixed(0)),
-                _buildStat('Remaining', _getRemainingAmount().toStringAsFixed(0)),
-              ],
-            ),
-          ),
-          Expanded(
-            child: _room.users.isEmpty
-                ? const Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.people_outline, size: 64, color: Colors.grey),
-                        SizedBox(height: 16),
-                        Text('No users in this room'),
-                        Text('Tap + button to add occupants'),
-                      ],
-                    ),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.all(12),
-                    itemCount: _room.users.length,
-                    itemBuilder: (context, index) {
-                      final user = _room.users[index];
-                      return _buildUserCard(user);
-                    },
+        body: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              color: Colors.indigo[50],
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildStat(
+                    'Users',
+                    _room.users.where((u) => u.isActive).length.toString(),
                   ),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _addUser,
-        backgroundColor: Colors.indigo,
-        elevation: 0,
-        highlightElevation: 0,
-        child: const Icon(Icons.person_add, color: Colors.white),
+                  _buildStat(
+                    'Pending',
+                    (_room.users.where((u) => u.isActive).length -
+                            _room.users
+                                .where((u) => u.isActive && u.isPaid)
+                                .length)
+                        .toString(),
+                  ),
+                  _buildStat(
+                    'Collected',
+                    _getCollectedAmount().toStringAsFixed(0),
+                  ),
+                  _buildStat(
+                    'Remaining',
+                    _getRemainingAmount().toStringAsFixed(0),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: _room.users.isEmpty
+                  ? const Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.people_outline,
+                              size: 64, color: Colors.grey),
+                          SizedBox(height: 16),
+                          Text('No users in this room'),
+                          Text('Tap + button to add occupants'),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(12),
+                      itemCount: _room.users.length,
+                      itemBuilder: (context, index) {
+                        final user = _room.users[index];
+                        return _buildUserCard(user);
+                      },
+                    ),
+            ),
+          ],
+        ),
+        floatingActionButton: FloatingActionButton(
+          onPressed: _addUser,
+          backgroundColor: Colors.indigo,
+          elevation: 0,
+          highlightElevation: 0,
+          child: const Icon(Icons.person_add, color: Colors.white),
+        ),
       ),
     );
   }
@@ -752,9 +774,11 @@ Future<void> _removeUserComment() async {
                 ),
               GestureDetector(
                 onTap: () {
-                  if (_isSelectionMode) return;
-                  _toggleUserPaid(user);
-                },
+  if (!user.isActive) return;   // ⭐ FULL BLOCK
+  if (_isSelectionMode) return;
+  _toggleUserPaid(user);
+},
+
                 child: Container(
                   width: 50,
                   height: 50,
