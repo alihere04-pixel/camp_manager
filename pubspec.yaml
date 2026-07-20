@@ -10,6 +10,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+    
 
   shared_preferences: ^2.2.3
 
@@ -26,6 +27,8 @@ dependencies:
   # PDF Import
   file_picker: ^8.0.0
   syncfusion_flutter_pdf: ^24.2.7
+  path_provider: ^2.1.5
+  share_plus: ^8.0.0
 
 dev_dependencies:
   flutter_test:
