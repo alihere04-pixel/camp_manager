@@ -40,7 +40,7 @@ class _MikrotikSettingsScreenState extends State<MikrotikSettingsScreen> {
 bool _isLoadingSavedUsers = false;
 
   String _loadingStatus = 'Generating...';
-
+  void Function(void Function())? _dialogSetState;
   
   int _selectedLength = 8;
   String _selectedType = 'mix';
@@ -340,6 +340,7 @@ bool _isLoadingSavedUsers = false;
 
     List<String> passwords = [];
     try {
+      _updateLoadingStatus('Generating passwords...');
       passwords = PasswordExportService.generateUniquePasswords(
         prefix: _selectedPrefix,
         length: _selectedLength,
@@ -367,6 +368,7 @@ bool _isLoadingSavedUsers = false;
     }
 
     // ✅ CREATE USERS IN MIKROTIK
+    _updateLoadingStatus('Creating users in MikroTik...');
     int createdCount = 0;
     int failedCount = 0;
     try {
@@ -383,6 +385,7 @@ bool _isLoadingSavedUsers = false;
         } else {
           failedCount++;
         }
+        _updateLoadingStatus('Creating users in MikroTik... $createdCount/${passwords.length}');
       }
     } catch (e) {
       // Ignore, continue with PDF generation
@@ -420,25 +423,37 @@ _showGenerateOptionsDialog(
   showDialog(
     context: context,
     barrierDismissible: false,
-    builder: (context) => const AlertDialog(
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          CircularProgressIndicator(),
-          SizedBox(height: 16),
-          Text(
-            'Generating...',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Colors.indigo,
-            ),
-            textAlign: TextAlign.center,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setDialogState) {
+        _dialogSetState = setDialogState;
+        return AlertDialog(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text(
+                _loadingStatus,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.indigo,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     ),
   );
+}
+
+  void _updateLoadingStatus(String status) {
+  _loadingStatus = status;
+  if (_dialogSetState != null) {
+    _dialogSetState!(() {});
+  }
 }
 
 
