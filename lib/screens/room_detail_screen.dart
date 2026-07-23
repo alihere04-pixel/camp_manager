@@ -578,7 +578,7 @@ Future<void> _removeUserComment() async {
 
   // ============ BUILD METHODS ============
 
-   @override
+  @override
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () async {
@@ -595,51 +595,20 @@ Future<void> _removeUserComment() async {
           ),
           actions: [
             if (_isSelectionMode) ...[
-              if (_selectedUserIds.length == 1)
-                IconButton(
-                  icon: const Icon(Icons.edit),
-                  onPressed: _editSelectedUser,
-                  tooltip: 'Edit User',
-                ),
-              if (_selectedUserIds.length == 1)
-                IconButton(
-                  icon: const Icon(Icons.person),
-                  onPressed: _toggleActiveStatus,
-                  tooltip: _room.users
-                          .firstWhere((u) => u.id == _selectedUserIds.first)
-                          .isActive
-                      ? 'Mark Inactive'
-                      : 'Mark Active',
-                ),
-              if (_selectedUserIds.length == 1)
-                IconButton(
-                  icon: const Icon(Icons.comment, color: Colors.blue),
-                  tooltip: 'Edit Comment',
-                  onPressed: _editUserComment,
-                ),
-              if (_selectedUserIds.length == 1)
-                IconButton(
-                  icon: const Icon(Icons.delete_forever, color: Colors.orange),
-                  tooltip: 'Remove Comment',
-                  onPressed: _removeUserComment,
-                ),
+              IconButton(
+                icon: const Icon(Icons.select_all),
+                onPressed: _selectAllUsers,
+                tooltip: 'Select All',
+              ),
+              IconButton(
+                icon: const Icon(Icons.deselect),
+                onPressed: _deselectAllUsers,
+                tooltip: 'Deselect All',
+              ),
               IconButton(
                 icon: const Icon(Icons.delete, color: Colors.red),
                 onPressed: _deleteSelectedUsers,
-                tooltip: 'Delete',
-              ),
-              IconButton(
-                icon: Icon(
-                  _selectedUserIds.length == _room.users.length
-                      ? Icons.deselect
-                      : Icons.select_all,
-                ),
-                onPressed: _selectedUserIds.length == _room.users.length
-                    ? _deselectAllUsers
-                    : _selectAllUsers,
-                tooltip: _selectedUserIds.length == _room.users.length
-                    ? 'Deselect All'
-                    : 'Select All',
+                tooltip: 'Delete Selected',
               ),
               IconButton(
                 icon: const Icon(Icons.close),
@@ -740,6 +709,85 @@ Future<void> _removeUserComment() async {
       ],
     );
   }
+    // ⭐ Long press pe popup menu (right-click style)
+  void _showUserActionsSheet(User user) {
+    // Ek user ko select bhi kar dete hain, taake existing functions use ho saken
+    setState(() {
+      _selectedUserIds = {user.id};
+      _isSelectionMode = true;
+    });
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.edit),
+                title: const Text('Edit User'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _editSelectedUser();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.person),
+                title: Text(
+                  _room.users
+                          .firstWhere((u) => u.id == user.id)
+                          .isActive
+                      ? 'Mark Inactive'
+                      : 'Mark Active',
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _toggleActiveStatus();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.comment, color: Colors.blue),
+                title: const Text('Edit Comment'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _editUserComment();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete_forever, color: Colors.orange),
+                title: const Text('Remove Comment'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _removeUserComment();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete, color: Colors.red),
+                title: const Text('Delete User'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _deleteSelectedUsers();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.send),
+                title: const Text('Send Password'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _sendUserPassword(user);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
 
   Widget _buildUserCard(User user) {
     final isSelected = _selectedUserIds.contains(user.id);
@@ -754,14 +802,20 @@ Future<void> _removeUserComment() async {
             : BorderSide.none,
       ),
       child: InkWell(
-        onLongPress: () => _toggleUserSelection(user.id),
-       onTap: () {
-  if (!user.isActive) return;   // ⭐ INACTIVE → NO TAP
-  if (_isSelectionMode) {
-    _toggleUserSelection(user.id);
-  }
-},
-
+        // ⭐ Long press → popup menu
+        onLongPress: () {
+          if (!user.isActive) return;
+          _showUserActionsSheet(user);
+        },
+        onTap: () {
+          if (!user.isActive) return;   // ⭐ INACTIVE → NO TAP
+          if (_isSelectionMode) {
+            // Selection mode ab sirf internal use ke liye hai
+            _toggleUserSelection(user.id);
+            return;
+          }
+          _toggleUserPaid(user);
+        },
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -774,32 +828,30 @@ Future<void> _removeUserComment() async {
                 ),
               GestureDetector(
                 onTap: () {
-  if (!user.isActive) return;   // ⭐ FULL BLOCK
-  if (_isSelectionMode) return;
-  _toggleUserPaid(user);
-},
-
+                  if (!user.isActive) return;   // ⭐ FULL BLOCK
+                  if (_isSelectionMode) return;
+                  _toggleUserPaid(user);
+                },
                 child: Container(
                   width: 50,
                   height: 50,
                   decoration: BoxDecoration(
                     color: user.isActive
-    ? (user.isPaid ? Colors.green : Colors.grey[300])
-    : Colors.grey[400],
+                        ? (user.isPaid ? Colors.green : Colors.grey[300])
+                        : Colors.grey[400],
                     shape: BoxShape.circle,
                   ),
                   child: Center(
                     child: Text(
-  user.initial,
-  style: TextStyle(
-    color: user.isActive
-        ? (user.isPaid ? Colors.white : Colors.black54)
-        : Colors.black26,
-    fontSize: 20,
-    fontWeight: FontWeight.bold,
-  ),
-),
-
+                      user.initial,
+                      style: TextStyle(
+                        color: user.isActive
+                            ? (user.isPaid ? Colors.white : Colors.black54)
+                            : Colors.black26,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -836,30 +888,33 @@ Future<void> _removeUserComment() async {
                       ),
                     ),
                     if (user.voucherCode != null && user.voucherCode!.isNotEmpty)
-  Text(
-    'Password: ${user.voucherCode}',
-    style: const TextStyle(fontSize: 12, color: Colors.indigo),
-  ),
-
-if ((user.comment ?? '').isNotEmpty)
-  Text(
-    'Note: ${user.comment}',
-    style: const TextStyle(
-      fontSize: 12,
-      color: Colors.orange,
-      fontStyle: FontStyle.italic,
-    ),
-  ),
-
+                      Text(
+                        'Password: ${user.voucherCode}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.indigo,
+                        ),
+                      ),
+                    if ((user.comment ?? '').isNotEmpty)
+                      Text(
+                        'Note: ${user.comment}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.orange,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
                   ],
                 ),
               ),
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: user.isPaid ? Colors.green[100] : Colors.orange[100],
+                      color:
+                          user.isPaid ? Colors.green[100] : Colors.orange[100],
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
@@ -867,22 +922,25 @@ if ((user.comment ?? '').isNotEmpty)
                       style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
-                        color: user.isPaid ? Colors.green[800] : Colors.orange[800],
+                        color: user.isPaid
+                            ? Colors.green[800]
+                            : Colors.orange[800],
                       ),
                     ),
                   ),
                   const SizedBox(width: 8),
                   IconButton(
-  icon: Icon(
-    Icons.send,
-    color: user.isSentMarked ? Colors.blue : Colors.green,  // ⭐ NEW
-  ),
-  onPressed: user.isActive ? () => _sendUserPassword(user) : null,
-  tooltip: user.isSentMarked
-      ? 'Already Sent (tap to send again)'
-      : 'Send Password',
-),
-
+                    icon: Icon(
+                      Icons.send,
+                      color:
+                          user.isSentMarked ? Colors.blue : Colors.green,
+                    ),
+                    onPressed:
+                        user.isActive ? () => _sendUserPassword(user) : null,
+                    tooltip: user.isSentMarked
+                        ? 'Already Sent (tap to send again)'
+                        : 'Send Password',
+                  ),
                 ],
               ),
             ],

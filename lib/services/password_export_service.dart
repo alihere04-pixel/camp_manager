@@ -46,6 +46,7 @@ class PasswordExportService {
     return shuffled;
   }
 
+  // ✅ SHARE PDF — 6 CARDS PER ROW, 72 PER PAGE (SAVE TO DEVICE JESA)
   static Future<String> generateAndSharePdf({
     required String profile,
     required String characterType,
@@ -67,120 +68,131 @@ class PasswordExportService {
     }
 
     final document = PdfDocument();
+document.pageSettings.margins.all = 0;
     final now = DateTime.now().toLocal();
-    final pdfFont = PdfStandardFont(PdfFontFamily.helvetica, 11);
-    final pdfBoldFont = PdfStandardFont(PdfFontFamily.helvetica, 12, style: PdfFontStyle.bold);
-    final pdfTitleFont = PdfStandardFont(PdfFontFamily.helvetica, 18, style: PdfFontStyle.bold);
 
-    final pageSize = document.pageSettings.size;
-    const margin = 28.0;
-    const cardWidth = 250.0;
-    const cardHeight = 95.0;
-    const horizontalGap = 18.0;
-    const verticalGap = 16.0;
-    const cardsPerRow = 2;
-    const cardsPerPage = 24;
+    // Fonts
 
-    var pageIndex = 0;
-    var currentPage = document.pages.add();
+    final profileFont = PdfStandardFont(PdfFontFamily.helvetica, 9, style: PdfFontStyle.bold);
+    final serialFont = PdfStandardFont(PdfFontFamily.helvetica, 8, style: PdfFontStyle.bold);
+    final labelFont = PdfStandardFont(PdfFontFamily.helvetica, 8);
+    final codeFont = PdfStandardFont(PdfFontFamily.helvetica, 12, style: PdfFontStyle.bold);
 
-    void drawPageHeader(PdfPage page) {
+    // Card dimensions
+    const double margin = 8;
+    const double cardWidth = 80;
+    const double cardHeight = 50;
+    const double horizontalGap = 8;
+    const double verticalGap = 5;
+    const int cardsPerRow = 6;
+
+    // Header height (fixed space for header)
+    const double headerHeight = 70;
+
+    // Page dimensions
+    final pageWidth = document.pageSettings.size.width;
+    final pageHeight = document.pageSettings.size.height;
+
+    // Track current page and position
+    PdfPage currentPage = document.pages.add();
+    double y = headerHeight;
+    int cardsOnPage = 0;
+
+    void drawHeader(PdfPage page) {
+      double yy = 14;
+      // Left: Profile
+      final profileText = 'Profile: $profile';
       page.graphics.drawString(
-        'Password List',
-        pdfTitleFont,
-        bounds: const Rect.fromLTWH(28, 24, 500, 24),
+        profileText,
+        profileFont,
+        bounds: Rect.fromLTWH(margin, yy, 200, 12),
       );
+      // Right: Generated date/time (same line)
+      final generatedText = 'Generated: ${_formatDate(now)}  ${_formatTime(now)}';
+      final generatedWidth = profileFont.measureString(generatedText).width;
       page.graphics.drawString(
-        'Profile: $profile',
-        pdfFont,
-        bounds: const Rect.fromLTWH(28, 54, 500, 16),
-      );
-      page.graphics.drawString(
-        'Generated: ${_formatDate(now)}  ${_formatTime(now)}',
-        pdfFont,
-        bounds: const Rect.fromLTWH(28, 72, 500, 16),
+        generatedText,
+        profileFont,
+        bounds: Rect.fromLTWH(pageWidth - generatedWidth - margin, yy, generatedWidth, 12),
       );
     }
+    // Draw header on first page
+    drawHeader(currentPage);
 
-    void drawVoucherCard({
-      required PdfPage page,
-      required double x,
-      required double y,
-      required int serialNumber,
-      required String password,
-    }) {
-      final borderBounds = Rect.fromLTWH(x, y, cardWidth, cardHeight);
-      page.graphics.drawRectangle(
-        bounds: borderBounds,
-        pen: PdfPen(PdfColor(120, 120, 120)),
-      );
+      for (var i = 0; i < passwords.length; i++) {
+    final voucherCode = passwords[i].length > 5
+        ? passwords[i].substring(0, 5)
+        : passwords[i];
 
-      page.graphics.drawString(
-        'Serial No: $serialNumber',
-        pdfBoldFont,
-        bounds: Rect.fromLTWH(x + 10, y + 12, cardWidth - 20, 18),
-      );
-      page.graphics.drawString(
-        'User Profile',
-        pdfFont,
-        bounds: Rect.fromLTWH(x + 10, y + 38, cardWidth - 20, 16),
-      );
-      page.graphics.drawString(
-        profile,
-        pdfBoldFont,
-        bounds: Rect.fromLTWH(x + 10, y + 54, cardWidth - 20, 18),
-      );
-      page.graphics.drawString(
-        'Password',
-        pdfFont,
-        bounds: Rect.fromLTWH(x + 10, y + 74, cardWidth - 20, 16),
-      );
-      page.graphics.drawString(
-        password,
-        pdfBoldFont,
-        bounds: Rect.fromLTWH(x + 10, y + 90, cardWidth - 20, 18),
-      );
+    final row = cardsOnPage ~/ cardsPerRow;
+    final col = cardsOnPage % cardsPerRow;
+
+       // ⭐ PERFECT CENTER FIX — PAGE MARGIN ZERO + HEADER BALANCED
+    final double totalCardsWidth = cardsPerRow * cardWidth;
+    final double totalGaps = (cardsPerRow - 1) * horizontalGap;
+    final double totalWidth = totalCardsWidth + totalGaps;
+
+    // ⭐ TRUE CENTER — Syncfusion hidden margin removed
+    final double startX = ((pageWidth - totalWidth) / 2);
+
+    final x = startX + (col * (cardWidth + horizontalGap));
+    final cardY = y + (row * (cardHeight + verticalGap));
+
+    // Card border
+    final borderBounds = Rect.fromLTWH(x, cardY, cardWidth, cardHeight);
+    currentPage.graphics.drawRectangle(
+      bounds: borderBounds,
+      pen: PdfPen(PdfColor(180, 180, 180), width: 0.5),
+    );
+
+    // Serial number
+    currentPage.graphics.drawString(
+      '[${i + 1}]',
+      serialFont,
+      bounds: Rect.fromLTWH(x + 3, cardY + 2, 20, 10),
+    );
+
+    // "Kode Voucher" label
+    currentPage.graphics.drawString(
+      'Kode Voucher',
+      labelFont,
+      bounds: Rect.fromLTWH(x + 3, cardY + 14, 50, 10),
+    );
+
+    // Voucher code
+    currentPage.graphics.drawString(
+      voucherCode,
+      codeFont,
+      bounds: Rect.fromLTWH(x + 3, cardY + 26, cardWidth - 6, 16),
+    );
+
+    cardsOnPage++;
+
+    // ✅ CHECK IF PAGE IS FULL (72 cards OR page height full)
+    if ((cardsOnPage >= 72 || (cardY + cardHeight > pageHeight - 25)) && i < passwords.length - 1) {
+      // Create new page
+      currentPage = document.pages.add();
+      drawHeader(currentPage);
+      y = headerHeight;
+      cardsOnPage = 0;
     }
-
-    drawPageHeader(currentPage);
-
-    for (var i = 0; i < passwords.length; i++) {
-      final pageOffset = i % cardsPerPage;
-      if (pageOffset == 0 && i > 0) {
-        pageIndex += 1;
-        currentPage = document.pages.add();
-        drawPageHeader(currentPage);
-      }
-
-      final cardIndexInPage = i % cardsPerPage;
-      final row = cardIndexInPage ~/ cardsPerRow;
-      final column = cardIndexInPage % cardsPerRow;
-      final x = margin + (column * (cardWidth + horizontalGap));
-      final y = 100.0 + (row * (cardHeight + verticalGap));
-
-      drawVoucherCard(
-        page: currentPage,
-        x: x,
-        y: y,
-        serialNumber: i + 1,
-        password: passwords[i],
-      );
-    }
+  }
+    final bytes = await document.save();
+    document.dispose();
 
     final downloadsDirectory = await _getDownloadsDirectory();
     await downloadsDirectory.create(recursive: true);
 
     final fileName = 'Password_List_${_formatFileDate(now)}_${_formatTime(now).replaceAll(':', '-').replaceAll(' ', '')}.pdf';
     final file = File('${downloadsDirectory.path}/$fileName');
-    final bytes = await document.save();
     await file.writeAsBytes(bytes);
-    document.dispose();
 
     await Share.shareXFiles([XFile(file.path)], subject: 'Password List');
 
     return file.path;
   }
 
+  // ✅ HELPER METHODS
   static String _getCharacters(String type) {
     switch (type) {
       case 'capital':
@@ -224,6 +236,8 @@ class PasswordExportService {
     return '${date.day.toString().padLeft(2, '0')}-${date.month.toString().padLeft(2, '0')}-${date.year}';
   }
 
+
+
   static String _formatFileDate(DateTime date) {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
@@ -234,6 +248,8 @@ class PasswordExportService {
     final suffix = date.hour >= 12 ? 'PM' : 'AM';
     return '$hour:$minute $suffix';
   }
+
+
 
   static Future<Directory> _getDownloadsDirectory() async {
     try {

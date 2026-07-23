@@ -32,6 +32,7 @@ class _PasswordManagerScreenState
 
   bool _selectionMode = false;
   List<String> _selectedUsers = [];
+  String _loadingStatus = 'Loading...';
 
   @override
   void initState() {
@@ -232,26 +233,36 @@ if (!_isOffline) {
     if (confirm != true) return;
 
     setState(() => _isLoading = true);
+    
 
     int deletedCount = 0;
     int failedCount = 0;
 
-    for (final username in List.from(_selectedUsers)) {
-      final success = await MikroTikService.deleteHotspotUser(username);
+    for (int i = 0; i < _selectedUsers.length; i++) {
+  final username = _selectedUsers[i];
 
-      if (success) {
-        _allPasswords.removeWhere((e) => e['name'] == username);
-        _cachedPasswords.removeWhere((e) => e['name'] == username);
-        _filteredPasswords.removeWhere((e) => e['name'] == username);
-        deletedCount++;
-      } else {
-        failedCount++;
-      }
-    }
+  final success = await MikroTikService.deleteHotspotUser(username);
 
-    _selectedUsers.clear();
-    _selectionMode = false;
-    await _savePasswordsLocally();
+  if (success) {
+    _allPasswords.removeWhere((e) => e['name'] == username);
+    _cachedPasswords.removeWhere((e) => e['name'] == username);
+    _filteredPasswords.removeWhere((e) => e['name'] == username);
+
+    deletedCount++;
+
+    // ⭐ LIVE DELETE COUNTER UPDATE
+    _loadingStatus = 'Deleting... ($deletedCount/${_selectedUsers.length})';
+    setState(() {});
+  } else {
+    failedCount++;
+  }
+}
+
+// ⭐ LOOP KE BAAD CLEAR KARO
+_selectedUsers.clear();
+_selectionMode = false;
+await _savePasswordsLocally();
+
 
     setState(() => _isLoading = false);
 
@@ -424,7 +435,29 @@ if (!_isOffline) {
           // ⭐ CHANGE 2: PULL-TO-REFRESH ADD KIYA
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
+  ? Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const CircularProgressIndicator(),
+        const SizedBox(height: 16),
+
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 250),
+          transitionBuilder: (child, animation) =>
+              FadeTransition(opacity: animation, child: child),
+          child: Text(
+            _loadingStatus,
+            key: ValueKey(_loadingStatus),
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.red,
+            ),
+          ),
+        ),
+      ],
+    )
+
                 : _filteredPasswords.isEmpty
                     ? const Center(child: Text('No passwords found'))
                     : RefreshIndicator(

@@ -9,7 +9,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 import 'package:flutter/services.dart';
 import 'dart:io';
-import 'package:path_provider/path_provider.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:file_picker/file_picker.dart';
 
@@ -40,7 +39,8 @@ class _MikrotikSettingsScreenState extends State<MikrotikSettingsScreen> {
   int _savedUsersCount = 0;
 bool _isLoadingSavedUsers = false;
 
-  String _loadingStatus = 'Initializing...';
+  String _loadingStatus = 'Generating...';
+
   
   int _selectedLength = 8;
   String _selectedType = 'mix';
@@ -88,8 +88,8 @@ bool _isLoadingSavedUsers = false;
     
     _isConnected = SettingsService.mikrotikConnected;
 
-    _loadProfiles();
-    _autoConnectOnStart(); // ✅ AUTO-CONNECT ON START
+     _loadProfiles();
+     _autoConnectOnStart(); // ✅ AUTO-CONNECT ON START
     _loadSavedUsersCount();
 
     // ✅ Timer HATA DIYA
@@ -237,26 +237,29 @@ bool _isLoadingSavedUsers = false;
     }
   }
 
-  Future<void> _loadProfiles() async {
+    Future<void> _loadProfiles() async {
     setState(() => _isLoadingProfiles = true);
     _profiles = await MikroTikService.getProfiles();
+    
+    // ✅ DUPLICATES HATAO
+    _profiles = _profiles.toSet().toList();
     
     if (!_profiles.contains('default')) {
       _profiles.insert(0, 'default');
     }
     
-    if (_selectedProfile.isEmpty) {
+    // ✅ AGAR SELECTED PROFILE INVALID HAI TO DEFAULT SET KARO
+    if (_selectedProfile.isEmpty || !_profiles.contains(_selectedProfile)) {
       _selectedProfile = 'default';
     }
     
-   setState(() => _isLoadingProfiles = false);
+    setState(() => _isLoadingProfiles = false);
 
-// PROFILES LOAD HONE KE BAAD — sirf tab load karo jab loading nahi ho rahi
-if (!_isLoadingPasswords) {
-  _loadAvailablePasswords();
-}
-}   // ← ⭐ THIS BRACKET WAS MISSING (VERY IMPORTANT)
-
+    // PROFILES LOAD HONE KE BAAD — sirf tab load karo jab loading nahi ho rahi
+    if (!_isLoadingPasswords) {
+      _loadAvailablePasswords();
+    }
+  }
 
 
   Future<void> _testConnection() async {
@@ -332,12 +335,11 @@ if (!_isLoadingPasswords) {
       return;
     }
 
-    // ✅ SHOW LOADING DIALOG WITH STATUS
+    // ✅ SHOW LOADING DIALOG
     _showLoadingDialog();
 
     List<String> passwords = [];
     try {
-      _updateLoadingStatus('Generating passwords...');
       passwords = PasswordExportService.generateUniquePasswords(
         prefix: _selectedPrefix,
         length: _selectedLength,
@@ -364,93 +366,81 @@ if (!_isLoadingPasswords) {
       return;
     }
 
-    // ✅ MIKROTIK MEIN USERS CREATE KARO
+    // ✅ CREATE USERS IN MIKROTIK
     int createdCount = 0;
     int failedCount = 0;
-    final totalCount = passwords.length;
-
-    for (var i = 0; i < passwords.length; i++) {
-      final password = passwords[i];
-      // ✅ USERNAME = PASSWORD (JAISE WHATSAPP MEIN HAI)
-      final username = password;
-
-      // ✅ LIVE COUNTER UPDATE
-      _updateLoadingStatus('Creating users in MikroTik... (${i + 1}/$totalCount)');
-      // Force dialog to rebuild
-      if (mounted) {
-        setState(() {});
+    try {
+      for (var i = 0; i < passwords.length; i++) {
+        final password = passwords[i];
+        final success = await MikroTikService.createHotspotUser(
+          username: password,
+          password: password,
+          comment: widget.campName,
+          profile: _selectedProfile,
+        );
+        if (success) {
+          createdCount++;
+        } else {
+          failedCount++;
+        }
       }
+    } catch (e) {
+      // Ignore, continue with PDF generation
+    }
 
-      final success = await MikroTikService.createHotspotUser(
-        username: username,
-        password: password,
-        comment: 'Generated from PDF',
-        profile: _selectedProfile,
+    // ✅ SHOW WARNING IF SOME USERS FAILED
+    if (failedCount > 0 && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('⚠️ $failedCount users failed to create in MikroTik.'),
+          backgroundColor: Colors.orange,
+        ),
       );
-
-      if (success) {
-        createdCount++;
-      } else {
-        failedCount++;
-      }
     }
-
-    if (failedCount > 0) {
-      print('⚠️ $failedCount users failed to create');
-    }
+    
 
     // Close loading dialog
-    if (mounted) {
-      Navigator.pop(context);
-      setState(() => _isLoading = false);
-    }
+if (mounted) {
+  Navigator.pop(context);
+  setState(() => _isLoading = false);
+}
 
-    if (createdCount == 0) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to create any users in MikroTik.')),
-      );
-      return;
-    }
+    // ✅ REFRESH AVAILABLE PASSWORDS COUNT
+    _loadAvailablePasswords();
 
-    // ✅ DIALOG DIKHAO — SHARE YA SAVE
-    _showGenerateOptionsDialog(
-      passwords: passwords,
-      createdCount: createdCount,
-    );
+// Show dialog for share/save
+_showGenerateOptionsDialog(
+  passwords: passwords,
+  createdCount: createdCount, // ✅ actual created count
+);
+
   }
-  // ✅ LOADING DIALOG WITH STATUS
+
   void _showLoadingDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          return AlertDialog(
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const CircularProgressIndicator(),
-                const SizedBox(height: 16),
-                Text(
-                  _loadingStatus,
-                  style: const TextStyle(fontSize: 14),
-                  textAlign: TextAlign.center,
-                ),
-              ],
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => const AlertDialog(
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircularProgressIndicator(),
+          SizedBox(height: 16),
+          Text(
+            'Generating...',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.indigo,
             ),
-          );
-        },
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
-    );
-  }
-  void _updateLoadingStatus(String status) {
-    _loadingStatus = status;
-    // Dialog update karne ke liye setState call karo
-    if (mounted) {
-      setState(() {});
-    }
-  }
+    ),
+  );
+}
+
 
   // ✅ NEW METHOD: DIALOG FOR SHARE / SAVE
   void _showGenerateOptionsDialog({
@@ -530,19 +520,16 @@ if (!_isLoadingPasswords) {
     }
   }
 
-  // ✅ SAVE TO DEVICE METHOD (NEW)
-    // ✅ SAVE TO DEVICE METHOD (WITH FOLDER PICKER)
+        // ✅ SAVE TO DEVICE — 6 CARDS PER ROW (PAGE 1: 72, PAGE 2: 28)
   Future<void> _savePdfToDevice({required List<String> passwords}) async {
     setState(() => _isLoading = true);
 
     try {
-      // ✅ FOLDER PICKER — USER SELECT KAREGA KAHAN SAVE KARNA HAI
       String? selectedDirectory = await FilePicker.platform.getDirectoryPath(
         dialogTitle: 'Select folder to save PDF',
       );
 
       if (selectedDirectory == null) {
-        // User cancelled folder selection
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Save cancelled.')),
@@ -552,110 +539,120 @@ if (!_isLoadingPasswords) {
         return;
       }
 
-      // ✅ PDF GENERATE KARO
       final document = PdfDocument();
+document.pageSettings.margins.all = 0;
       final now = DateTime.now().toLocal();
-      final pdfFont = PdfStandardFont(PdfFontFamily.helvetica, 11);
-      final pdfBoldFont = PdfStandardFont(PdfFontFamily.helvetica, 12, style: PdfFontStyle.bold);
-      final pdfTitleFont = PdfStandardFont(PdfFontFamily.helvetica, 18, style: PdfFontStyle.bold);
+      final pageWidth = document.pageSettings.size.width;
+      final pageHeight = document.pageSettings.size.height;
 
-      const margin = 28.0;
-      const cardWidth = 250.0;
-      const cardHeight = 95.0;
-      const horizontalGap = 18.0;
-      const verticalGap = 16.0;
-      const cardsPerRow = 2;
-      const cardsPerPage = 24;
+      // Fonts
 
-      var pageIndex = 0;
-      var currentPage = document.pages.add();
+      final profileFont = PdfStandardFont(PdfFontFamily.helvetica, 9, style: PdfFontStyle.bold);
+      final serialFont = PdfStandardFont(PdfFontFamily.helvetica, 8, style: PdfFontStyle.bold);
+      final labelFont = PdfStandardFont(PdfFontFamily.helvetica, 8);
+      final codeFont = PdfStandardFont(PdfFontFamily.helvetica, 12, style: PdfFontStyle.bold);
 
-      void drawPageHeader(PdfPage page) {
+      // Card dimensions
+      const double margin = 8;
+      const double cardWidth = 80;
+      const double cardHeight = 50;
+      const double horizontalGap = 8;
+      const double verticalGap = 5;
+      const int cardsPerRow = 6;
+
+      // Header height (fixed space for header)
+      const double headerHeight = 70;
+
+      // Track current page and position
+      PdfPage currentPage = document.pages.add();
+      double y = headerHeight;
+      int cardsOnPage = 0;
+
+      // Function to draw header on a page
+      void drawHeader(PdfPage page) {
+        double yy = 14;
+        // Left: Profile
+        final profileText = 'Profile: $_selectedProfile';
         page.graphics.drawString(
-          'Password List',
-          pdfTitleFont,
-          bounds: const Rect.fromLTWH(28, 24, 500, 24),
+          profileText,
+          profileFont,
+          bounds: Rect.fromLTWH(margin, yy, 200, 12),
         );
+        // Right: Generated date/time (same line)
+        final generatedText = 'Generated: ${_formatDate(now)}  ${_formatTime(now)}';
+        final generatedWidth = profileFont.measureString(generatedText).width;
         page.graphics.drawString(
-          'Profile: $_selectedProfile',
-          pdfFont,
-          bounds: const Rect.fromLTWH(28, 54, 500, 16),
-        );
-        page.graphics.drawString(
-          'Generated: ${_formatDate(now)}  ${_formatTime(now)}',
-          pdfFont,
-          bounds: const Rect.fromLTWH(28, 72, 500, 16),
+          generatedText,
+          profileFont,
+          bounds: Rect.fromLTWH(pageWidth - generatedWidth - margin, yy, generatedWidth, 12),
         );
       }
 
-      void drawVoucherCard({
-        required PdfPage page,
-        required double x,
-        required double y,
-        required int serialNumber,
-        required String password,
-      }) {
-        final borderBounds = Rect.fromLTWH(x, y, cardWidth, cardHeight);
-        page.graphics.drawRectangle(
-          bounds: borderBounds,
-          pen: PdfPen(PdfColor(120, 120, 120)),
-        );
+      // Draw header on first page
+      drawHeader(currentPage);
 
-        final voucherCode = password.length > 5 ? password.substring(0, 5) : password;
-        final phoneNumber = '0552567451';
-
-        page.graphics.drawString(
-          '[$serialNumber] $phoneNumber',
-          pdfBoldFont,
-          bounds: Rect.fromLTWH(x + 10, y + 8, cardWidth - 20, 18),
-        );
-        page.graphics.drawString(
-          'Kode Voucher',
-          pdfFont,
-          bounds: Rect.fromLTWH(x + 10, y + 30, cardWidth - 20, 18),
-        );
-        page.graphics.drawString(
-          voucherCode,
-          pdfBoldFont,
-          bounds: Rect.fromLTWH(x + 10, y + 48, cardWidth - 20, 24),
-        );
-        page.graphics.drawString(
-          '34d aed 20.00',
-          pdfFont,
-          bounds: Rect.fromLTWH(x + 10, y + 74, cardWidth - 20, 18),
-        );
-      }
-
-      drawPageHeader(currentPage);
-
+      // Loop through all passwords
       for (var i = 0; i < passwords.length; i++) {
-        final pageOffset = i % cardsPerPage;
-        if (pageOffset == 0 && i > 0) {
-          pageIndex += 1;
-          currentPage = document.pages.add();
-          drawPageHeader(currentPage);
-        }
+        final voucherCode = passwords[i].length > 5
+            ? passwords[i].substring(0, 5)
+            : passwords[i];
 
-        final cardIndexInPage = i % cardsPerPage;
-        final row = cardIndexInPage ~/ cardsPerRow;
-        final column = cardIndexInPage % cardsPerRow;
-        final x = margin + (column * (cardWidth + horizontalGap));
-        final y = 100.0 + (row * (cardHeight + verticalGap));
+        final row = cardsOnPage ~/ cardsPerRow;
+        final col = cardsOnPage % cardsPerRow;
 
-        drawVoucherCard(
-          page: currentPage,
-          x: x,
-          y: y,
-          serialNumber: i + 1,
-          password: passwords[i],
+        // ⭐ PERFECT CENTER FIX — PAGE MARGIN ZERO + TRUE CENTER
+        final totalWidth = cardsPerRow * cardWidth + (cardsPerRow - 1) * horizontalGap;
+
+        // ⭐ TRUE CENTER — Syncfusion hidden margin removed
+        final startX = ((pageWidth - totalWidth) / 2);
+
+        final x = startX + (col * (cardWidth + horizontalGap));
+        final cardY = y + (row * (cardHeight + verticalGap));
+
+        // Card border
+        final borderBounds = Rect.fromLTWH(x, cardY, cardWidth, cardHeight);
+        currentPage.graphics.drawRectangle(
+          bounds: borderBounds,
+          pen: PdfPen(PdfColor(180, 180, 180), width: 0.5),
         );
+
+        // Serial number
+        currentPage.graphics.drawString(
+          '[${i + 1}]',
+          serialFont,
+          bounds: Rect.fromLTWH(x + 3, cardY + 2, 20, 10),
+        );
+
+        // "Kode Voucher" label
+        currentPage.graphics.drawString(
+          'Kode Voucher',
+          labelFont,
+          bounds: Rect.fromLTWH(x + 3, cardY + 14, 50, 10),
+        );
+
+        // Voucher code
+        currentPage.graphics.drawString(
+          voucherCode,
+          codeFont,
+          bounds: Rect.fromLTWH(x + 3, cardY + 26, cardWidth - 6, 16),
+        );
+
+        cardsOnPage++;
+
+        // ✅ CHECK IF PAGE IS FULL (72 cards OR page height full)
+        if ((cardsOnPage >= 72 || (cardY + cardHeight > pageHeight - 25)) && i < passwords.length - 1) {
+          // Create new page
+          currentPage = document.pages.add();
+          drawHeader(currentPage);
+          y = headerHeight;
+          cardsOnPage = 0;
+        }
       }
 
       final bytes = await document.save();
       document.dispose();
 
-      // ✅ USER SELECTED FOLDER MEIN SAVE KARO
-      final fileName = 'Password_List_${DateTime.now().millisecondsSinceEpoch}.pdf';
+      final fileName = 'Voucher_List_${DateTime.now().millisecondsSinceEpoch}.pdf';
       final file = File('$selectedDirectory/$fileName');
       await file.writeAsBytes(bytes);
 
@@ -675,8 +672,8 @@ if (!_isLoadingPasswords) {
       if (mounted) setState(() => _isLoading = false);
     }
   }
-  // ✅ HELPER METHODS (DATE/TIME FORMAT)
-  String _formatDate(DateTime date) {
+  
+    String _formatDate(DateTime date) {
     return '${date.day.toString().padLeft(2, '0')}-${date.month.toString().padLeft(2, '0')}-${date.year}';
   }
 
@@ -686,6 +683,7 @@ if (!_isLoadingPasswords) {
     final suffix = date.hour >= 12 ? 'PM' : 'AM';
     return '$hour:$minute $suffix';
   }
+  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1082,21 +1080,21 @@ const SizedBox(height: 16),
                         ),
                       )
                     : DropdownButton<String>(
-                        value: _selectedProfile,
-                        isExpanded: true,
-                        hint: const Text('Select Profile'),
-                        items: _profiles.map((profile) {
-                          return DropdownMenuItem<String>(
-                            value: profile,
-                            child: Text(profile),
-                          );
-                        }).toList(),
-                        onChanged: (value) {
-                          setState(() {
-                            _selectedProfile = value!;
-                          });
-                        },
-                      ),
+  value: _profiles.contains(_selectedProfile) ? _selectedProfile : null,
+  isExpanded: true,
+  hint: const Text('Select Profile'),
+  items: _profiles.map((profile) {
+    return DropdownMenuItem<String>(
+      value: profile,
+      child: Text(profile),
+    );
+  }).toList(),
+  onChanged: (value) {
+    setState(() {
+      _selectedProfile = value!;
+    });
+  },
+)
               ),
             ),
             
