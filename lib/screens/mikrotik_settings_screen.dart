@@ -304,7 +304,7 @@ bool _isLoadingSavedUsers = false;
     await SettingsService.saveMikrotikProfile(_selectedProfile);
     
     // ✅ AUTO-CONNECT: SETTINGS SAVE HONE KE BAAD CONNECT KARO
-    _isLoading = true;
+    setState(() => _isLoading = true);
     final connected = await MikroTikService.checkConnection();
     
     setState(() {
@@ -334,6 +334,24 @@ bool _isLoadingSavedUsers = false;
       );
       return;
     }
+
+    // ✅ CHECK INTERNET CONNECTION FIRST
+    final isOnline = await MikroTikService.checkConnection();
+    if (!isOnline) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ No internet connection. Please connect to MikroTik WiFi first.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // ✅ RESET STATE BEFORE GENERATING
+    setState(() {
+      _isLoading = false;
+    });
 
     // ✅ SHOW LOADING DIALOG
     _showLoadingDialog();
@@ -404,6 +422,7 @@ bool _isLoadingSavedUsers = false;
 
     // Close loading dialog
 if (mounted) {
+  _dialogSetState = null; // ✅ RESET AFTER CLOSING
   Navigator.pop(context);
   setState(() => _isLoading = false);
 }
@@ -420,6 +439,7 @@ _showGenerateOptionsDialog(
   }
 
   void _showLoadingDialog() {
+  _dialogSetState = null; // ✅ RESET BEFORE SHOWING
   showDialog(
     context: context,
     barrierDismissible: false,
@@ -451,8 +471,13 @@ _showGenerateOptionsDialog(
 
   void _updateLoadingStatus(String status) {
   _loadingStatus = status;
-  if (_dialogSetState != null) {
-    _dialogSetState!(() {});
+  if (_dialogSetState != null && mounted) {
+    try {
+      _dialogSetState!(() {});
+    } catch (e) {
+      // Dialog already disposed, ignore
+      _dialogSetState = null;
+    }
   }
 }
 
@@ -519,6 +544,7 @@ _showGenerateOptionsDialog(
         passwordLength: _selectedLength,
         passwordCount: passwords.length,
         prefix: _selectedPrefix,
+        existingPasswords: passwords,  // ✅ PASSWORDS PASS KARO
       );
 
       if (!mounted) return;
@@ -565,19 +591,19 @@ document.pageSettings.margins.all = 0;
       final profileFont = PdfStandardFont(PdfFontFamily.helvetica, 9, style: PdfFontStyle.bold);
       final serialFont = PdfStandardFont(PdfFontFamily.helvetica, 8, style: PdfFontStyle.bold);
       final labelFont = PdfStandardFont(PdfFontFamily.helvetica, 8);
-      final codeFont = PdfStandardFont(PdfFontFamily.helvetica, 12, style: PdfFontStyle.bold);
+      final codeFont = PdfStandardFont(PdfFontFamily.helvetica, 10, style: PdfFontStyle.bold);
 
       // Card dimensions
       const double margin = 8;
       const double cardWidth = 80;
-      const double cardHeight = 50;
+      const double cardHeight = 48;
       const double horizontalGap = 8;
       const double verticalGap = 5;
       const int cardsPerRow = 6;
 
       // Header height (fixed space for header)
       const double headerHeight = 70;
-
+      const int maxCardsPerPage = 78; // 13 rows × 6 columns
       // Track current page and position
       PdfPage currentPage = document.pages.add();
       double y = headerHeight;
@@ -608,9 +634,7 @@ document.pageSettings.margins.all = 0;
 
       // Loop through all passwords
       for (var i = 0; i < passwords.length; i++) {
-        final voucherCode = passwords[i].length > 5
-            ? passwords[i].substring(0, 5)
-            : passwords[i];
+        final voucherCode = passwords[i];
 
         final row = cardsOnPage ~/ cardsPerRow;
         final col = cardsOnPage % cardsPerRow;
@@ -654,8 +678,8 @@ document.pageSettings.margins.all = 0;
 
         cardsOnPage++;
 
-        // ✅ CHECK IF PAGE IS FULL (72 cards OR page height full)
-        if ((cardsOnPage >= 72 || (cardY + cardHeight > pageHeight - 25)) && i < passwords.length - 1) {
+        // ✅ CHECK IF PAGE IS FULL (78 cards OR page height full)
+        if ((cardsOnPage >= maxCardsPerPage || (cardY + cardHeight > pageHeight - 25)) && i < passwords.length - 1) {
           // Create new page
           currentPage = document.pages.add();
           drawHeader(currentPage);
@@ -1025,8 +1049,6 @@ const SizedBox(height: 16),
                 DropdownMenuItem(value: 4, child: Text('4')),
                 DropdownMenuItem(value: 6, child: Text('6')),
                 DropdownMenuItem(value: 8, child: Text('8')),
-                DropdownMenuItem(value: 10, child: Text('10')),
-                DropdownMenuItem(value: 12, child: Text('12')),
               ],
               onChanged: (int? value) {
                 if (value == null) return;

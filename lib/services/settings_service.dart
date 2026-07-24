@@ -1,7 +1,10 @@
 import 'package:hive/hive.dart';
 
+
 class SettingsService {
-  static const String _boxName = 'settings_box';
+    static const String _boxName = 'settings_box';
+
+
 
   static Future<void> init() async {
     if (!Hive.isBoxOpen(_boxName)) {
@@ -11,16 +14,16 @@ class SettingsService {
 
   static Box _getBox() => Hive.box(_boxName);
 
-  // ============ MIKROTIK SETTINGS ============
-
   static String get mikrotikHost =>
       _getBox().get('mikrotik_host', defaultValue: '') as String;
 
   static String get mikrotikUser =>
       _getBox().get('mikrotik_user', defaultValue: '') as String;
 
-  static String get mikrotikPass =>
-      _getBox().get('mikrotik_pass', defaultValue: '') as String;
+  // ✅ CHANGE 1: Future hatao, String rakho, Hive se lo
+  static String get mikrotikPass {
+    return _getBox().get('mikrotik_pass', defaultValue: '') as String;
+  }
 
   static String get mikrotikPort =>
       _getBox().get('mikrotik_port', defaultValue: '8081') as String;
@@ -38,7 +41,6 @@ class SettingsService {
     await _getBox().put('mikrotik_connected', value);
   }
 
-  // ⭐ NEW FUNCTIONS (CAMP-WISE SETTINGS)
   static Future<void> setMikrotikHost(String value) async {
     await _getBox().put('mikrotik_host', value);
   }
@@ -51,6 +53,7 @@ class SettingsService {
     await _getBox().put('mikrotik_user', value);
   }
 
+  // ✅ CHANGE 2: Hive mein save karo, secure storage mat use karo
   static Future<void> setMikrotikPass(String value) async {
     await _getBox().put('mikrotik_pass', value);
   }
@@ -69,6 +72,7 @@ class SettingsService {
     final box = _getBox();
     await box.put('mikrotik_host', host);
     await box.put('mikrotik_user', user);
+    // ✅ CHANGE 3: Hive mein save karo
     await box.put('mikrotik_pass', pass);
     await box.put('mikrotik_port', port);
     await box.put('mikrotik_use_ssl', useSsl);
@@ -77,8 +81,6 @@ class SettingsService {
   static Future<void> saveMikrotikProfile(String profile) async {
     await _getBox().put('mikrotik_profile', profile);
   }
-
-  // ============ PASSWORD SETTINGS ============
 
   static int get passwordLength =>
       _getBox().get('password_length', defaultValue: 8) as int;
@@ -99,8 +101,6 @@ class SettingsService {
     await box.put('password_type', type);
     await box.put('password_prefix', prefix);
   }
-
-  // ============ WHATSAPP SETTINGS ============
 
   static String get whatsappMessageTemplate => _getBox().get(
         'whatsapp_template',

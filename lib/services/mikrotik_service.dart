@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'package:http/http.dart' as http;
@@ -31,31 +32,43 @@ class MikroTikService {
   // GET PROFILES
   // ==========================
 
+  static const Duration _defaultTimeout = Duration(seconds: 15);
+  static const int _maxRetries = 2;
+
   static Future<List<String>> getProfiles() async {
     final url = _buildUri('ip/hotspot/user/profile');
-    try {
-      final response = await http.get(
-        url,
-        headers: {
-          'Authorization': _getAuthHeader(),
-          'Content-Type': 'application/json',
-        },
-      ).timeout(const Duration(seconds: 10));
+    
+    for (var attempt = 0; attempt < _maxRetries; attempt++) {
+      try {
+        final response = await http.get(
+          url,
+          headers: {
+            'Authorization': _getAuthHeader(),
+            'Content-Type': 'application/json',
+          },
+        ).timeout(_defaultTimeout);
 
-      if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
-        final names = data.map((e) => e['name'] as String).toList();
-        
-        if (!names.contains('default')) {
-          names.insert(0, 'default');
+        if (response.statusCode == 200) {
+          final List<dynamic> data = jsonDecode(response.body);
+          final names = data.map((e) => e['name'] as String).toList();
+          
+          if (!names.contains('default')) {
+            names.insert(0, 'default');
+          }
+          
+          return names;
         }
-        
-        return names;
+        return ['default'];
+      } on TimeoutException {
+        if (attempt == _maxRetries - 1) return ['default'];
+        await Future.delayed(Duration(milliseconds: 500 * (attempt + 1)));
+      } catch (e) {
+        if (attempt == _maxRetries - 1) return ['default'];
+        await Future.delayed(Duration(milliseconds: 500 * (attempt + 1)));
       }
-      return ['default'];
-    } catch (e) {
-      return ['default'];
     }
+    
+    return ['default'];
   }
 
   // ==========================
@@ -65,20 +78,28 @@ class MikroTikService {
   static Future<bool> checkConnection() async {
     final url = _buildUri('system/resource');
     
-    try {
-      final response = await http.get(
-        url,
-        headers: {
-          'Authorization': _getAuthHeader(),
-          'Content-Type': 'application/json',
-        },
-      ).timeout(const Duration(seconds: 5));
+    for (var attempt = 0; attempt < _maxRetries; attempt++) {
+      try {
+        final response = await http.get(
+          url,
+          headers: {
+            'Authorization': _getAuthHeader(),
+            'Content-Type': 'application/json',
+          },
+        ).timeout(const Duration(seconds: 8));
 
-      return response.statusCode == 200;
-      
-    } catch(e) {
-      return false;
+        return response.statusCode == 200;
+        
+      } on TimeoutException {
+        if (attempt == _maxRetries - 1) return false;
+        await Future.delayed(Duration(milliseconds: 300 * (attempt + 1)));
+      } catch (e) {
+        if (attempt == _maxRetries - 1) return false;
+        await Future.delayed(Duration(milliseconds: 300 * (attempt + 1)));
+      }
     }
+    
+    return false;
   }
 
   // ==========================
@@ -93,25 +114,33 @@ class MikroTikService {
   }) async {
     final url = _buildUri('ip/hotspot/user');
 
-    try {
-      final response = await http.put(
-        url,
-        headers: {
-          'Authorization': _getAuthHeader(),
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          'name': username,
-          'password': password,
-          'comment': comment,
-          'profile': profile,
-        }),
-      ).timeout(const Duration(seconds: 10));
+    for (var attempt = 0; attempt < _maxRetries; attempt++) {
+      try {
+        final response = await http.put(
+          url,
+          headers: {
+            'Authorization': _getAuthHeader(),
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode({
+            'name': username,
+            'password': password,
+            'comment': comment,
+            'profile': profile,
+          }),
+        ).timeout(_defaultTimeout);
 
-      return response.statusCode == 200 || response.statusCode == 201;
-    } catch(e) {
-      return false;
+        return response.statusCode == 200 || response.statusCode == 201;
+      } on TimeoutException {
+        if (attempt == _maxRetries - 1) return false;
+        await Future.delayed(Duration(milliseconds: 500 * (attempt + 1)));
+      } catch (e) {
+        if (attempt == _maxRetries - 1) return false;
+        await Future.delayed(Duration(milliseconds: 500 * (attempt + 1)));
+      }
     }
+    
+    return false;
   }
 
   // ==========================
@@ -277,6 +306,8 @@ if (hostRes.statusCode == 200) {
   String? profile,
 }) async {
   final url = _buildUri('ip/hotspot/user');
+  
+  for (var attempt = 0; attempt < _maxRetries; attempt++) {
   try {
     final response = await http.get(
       url,
@@ -284,7 +315,7 @@ if (hostRes.statusCode == 200) {
         'Authorization': _getAuthHeader(),
         'Content-Type': 'application/json',
       },
-    ).timeout(const Duration(seconds: 5));
+    ).timeout(_defaultTimeout);
 
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
@@ -324,9 +355,16 @@ if (hostRes.statusCode == 200) {
       return availableUsers.cast<Map<String, dynamic>>();
     }
     return [];
+  } on TimeoutException {
+    if (attempt == _maxRetries - 1) return [];
+    await Future.delayed(Duration(milliseconds: 500 * (attempt + 1)));
   } catch (e) {
-    return [];
+    if (attempt == _maxRetries - 1) return [];
+    await Future.delayed(Duration(milliseconds: 500 * (attempt + 1)));
   }
+  }
+  
+  return [];
 }
 
 // ==========================
@@ -337,6 +375,8 @@ static Future<List<Map<String, dynamic>>> getUsedPasswords({
   String? profile,
 }) async {
   final url = _buildUri('ip/hotspot/user');
+  
+  for (var attempt = 0; attempt < _maxRetries; attempt++) {
   try {
     final response = await http.get(
       url,
@@ -344,7 +384,7 @@ static Future<List<Map<String, dynamic>>> getUsedPasswords({
         'Authorization': _getAuthHeader(),
         'Content-Type': 'application/json',
       },
-    ).timeout(const Duration(seconds: 5));
+    ).timeout(_defaultTimeout);
 
     if (response.statusCode == 200) {
       final List<dynamic> data = jsonDecode(response.body);
@@ -383,9 +423,16 @@ static Future<List<Map<String, dynamic>>> getUsedPasswords({
       return usedUsers.cast<Map<String, dynamic>>();
     }
     return [];
+  } on TimeoutException {
+    if (attempt == _maxRetries - 1) return [];
+    await Future.delayed(Duration(milliseconds: 500 * (attempt + 1)));
   } catch (e) {
-    return [];
+    if (attempt == _maxRetries - 1) return [];
+    await Future.delayed(Duration(milliseconds: 500 * (attempt + 1)));
   }
+  }
+  
+  return [];
 }
 
 
@@ -397,6 +444,8 @@ static Future<List<Map<String, dynamic>>> getUsedPasswords({
     final findUrl = _buildUri(
       'ip/hotspot/user?name=${Uri.encodeQueryComponent(username)}',
     );
+    
+    for (var attempt = 0; attempt < _maxRetries; attempt++) {
     try {
       final findResponse = await http.get(
         findUrl,
@@ -404,7 +453,7 @@ static Future<List<Map<String, dynamic>>> getUsedPasswords({
           'Authorization': _getAuthHeader(),
           'Content-Type': 'application/json',
         },
-      ).timeout(const Duration(seconds: 10));
+      ).timeout(_defaultTimeout);
       
       if (findResponse.statusCode == 200) {
         final List<dynamic> users = jsonDecode(findResponse.body);
@@ -427,9 +476,16 @@ static Future<List<Map<String, dynamic>>> getUsedPasswords({
         }
       }
       return false;
+    } on TimeoutException {
+      if (attempt == _maxRetries - 1) return false;
+      await Future.delayed(Duration(milliseconds: 500 * (attempt + 1)));
     } catch (e) {
-      return false;
+      if (attempt == _maxRetries - 1) return false;
+      await Future.delayed(Duration(milliseconds: 500 * (attempt + 1)));
     }
+    }
+    
+    return false;
   }
 
   // ==========================
@@ -439,6 +495,7 @@ static Future<List<Map<String, dynamic>>> getUsedPasswords({
   static Future<Map<String, String>> getUserProfiles() async {
     final url = _buildUri('ip/hotspot/user');
 
+    for (var attempt = 0; attempt < _maxRetries; attempt++) {
     try {
       final response = await http.get(
         url,
@@ -446,7 +503,7 @@ static Future<List<Map<String, dynamic>>> getUsedPasswords({
           'Authorization': _getAuthHeader(),
           'Content-Type': 'application/json',
         },
-      );
+      ).timeout(_defaultTimeout);
 
       if (response.statusCode == 200) {
         final List data = jsonDecode(response.body);
@@ -465,9 +522,16 @@ static Future<List<Map<String, dynamic>>> getUsedPasswords({
       }
 
       return {};
+    } on TimeoutException {
+      if (attempt == _maxRetries - 1) return {};
+      await Future.delayed(Duration(milliseconds: 500 * (attempt + 1)));
     } catch (e) {
-      return {};
+      if (attempt == _maxRetries - 1) return {};
+      await Future.delayed(Duration(milliseconds: 500 * (attempt + 1)));
     }
+    }
+    
+    return {};
   }
 
   // ==========================
@@ -475,10 +539,9 @@ static Future<List<Map<String, dynamic>>> getUsedPasswords({
   // ==========================
 
   static Future<List<Map<String, dynamic>>> getActiveUsers() async {
+    for (var attempt = 0; attempt < _maxRetries; attempt++) {
     try {
       final url = _buildUri('ip/hotspot/active/print');
-      
-      
       
       final response = await http.post(
         url,
@@ -489,7 +552,7 @@ static Future<List<Map<String, dynamic>>> getUsedPasswords({
         body: jsonEncode({
           '.proplist': ['.id', 'user', 'address', 'uptime', 'bytes-in', 'bytes-out', 'server'],
         }),
-      ).timeout(const Duration(seconds: 10));
+      ).timeout(_defaultTimeout);
       
       if (response.statusCode != 200) {
         
@@ -512,15 +575,22 @@ static Future<List<Map<String, dynamic>>> getUsedPasswords({
         };
       }).toList();
       
+    } on TimeoutException {
+      if (attempt == _maxRetries - 1) return [];
+      await Future.delayed(Duration(milliseconds: 500 * (attempt + 1)));
     } catch (e) {
-      
-      return [];
+      if (attempt == _maxRetries - 1) return [];
+      await Future.delayed(Duration(milliseconds: 500 * (attempt + 1)));
     }
+    }
+    
+    return [];
   } 
 
 static Future<Map<String, String>> getProfileExpiryMap() async {
   final url = _buildUri('ip/hotspot/user/profile');
 
+  for (var attempt = 0; attempt < _maxRetries; attempt++) {
   try {
     final response = await http.get(
       url,
@@ -528,7 +598,7 @@ static Future<Map<String, String>> getProfileExpiryMap() async {
         'Authorization': _getAuthHeader(),
         'Content-Type': 'application/json',
       },
-    );
+    ).timeout(_defaultTimeout);
 
     if (response.statusCode != 200) return {};
 
@@ -541,9 +611,16 @@ static Future<Map<String, String>> getProfileExpiryMap() async {
     }
 
     return map;
+  } on TimeoutException {
+    if (attempt == _maxRetries - 1) return {};
+    await Future.delayed(Duration(milliseconds: 500 * (attempt + 1)));
   } catch (e) {
-    return {};
+    if (attempt == _maxRetries - 1) return {};
+    await Future.delayed(Duration(milliseconds: 500 * (attempt + 1)));
   }
+  }
+  
+  return {};
 }
 
 

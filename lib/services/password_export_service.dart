@@ -53,13 +53,20 @@ class PasswordExportService {
     required int passwordLength,
     required int passwordCount,
     required String prefix,
+    List<String>? existingPasswords,  // ✅ NAYA PARAMETER
   }) async {
-    final passwords = generateUniquePasswords(
-      prefix: prefix,
-      length: passwordLength,
-      type: characterType,
-      count: passwordCount,
-    );
+    List<String> passwords;
+    
+    if (existingPasswords != null && existingPasswords.isNotEmpty) {
+      passwords = existingPasswords;
+    } else {
+      passwords = generateUniquePasswords(
+        prefix: prefix,
+        length: passwordLength,
+        type: characterType,
+        count: passwordCount,
+      );
+    }
 
     if (passwords.isEmpty) {
       throw Exception(
@@ -76,18 +83,19 @@ document.pageSettings.margins.all = 0;
     final profileFont = PdfStandardFont(PdfFontFamily.helvetica, 9, style: PdfFontStyle.bold);
     final serialFont = PdfStandardFont(PdfFontFamily.helvetica, 8, style: PdfFontStyle.bold);
     final labelFont = PdfStandardFont(PdfFontFamily.helvetica, 8);
-    final codeFont = PdfStandardFont(PdfFontFamily.helvetica, 12, style: PdfFontStyle.bold);
+    final codeFont = PdfStandardFont(PdfFontFamily.helvetica, 10, style: PdfFontStyle.bold);
 
     // Card dimensions
     const double margin = 8;
     const double cardWidth = 80;
-    const double cardHeight = 50;
+    const double cardHeight = 48;
     const double horizontalGap = 8;
     const double verticalGap = 5;
     const int cardsPerRow = 6;
 
     // Header height (fixed space for header)
     const double headerHeight = 70;
+        const int maxCardsPerPage = 78; // 13 rows × 6 columns
 
     // Page dimensions
     final pageWidth = document.pageSettings.size.width;
@@ -120,9 +128,7 @@ document.pageSettings.margins.all = 0;
     drawHeader(currentPage);
 
       for (var i = 0; i < passwords.length; i++) {
-    final voucherCode = passwords[i].length > 5
-        ? passwords[i].substring(0, 5)
-        : passwords[i];
+    final voucherCode = passwords[i];
 
     final row = cardsOnPage ~/ cardsPerRow;
     final col = cardsOnPage % cardsPerRow;
@@ -168,8 +174,8 @@ document.pageSettings.margins.all = 0;
 
     cardsOnPage++;
 
-    // ✅ CHECK IF PAGE IS FULL (72 cards OR page height full)
-    if ((cardsOnPage >= 72 || (cardY + cardHeight > pageHeight - 25)) && i < passwords.length - 1) {
+    // ✅ CHECK IF PAGE IS FULL (78 cards OR page height full)
+    if ((cardsOnPage >= maxCardsPerPage || (cardY + cardHeight > pageHeight - 25)) && i < passwords.length - 1) {
       // Create new page
       currentPage = document.pages.add();
       drawHeader(currentPage);
@@ -196,15 +202,19 @@ document.pageSettings.margins.all = 0;
   static String _getCharacters(String type) {
     switch (type) {
       case 'capital':
-        return 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        // 0, O, I hata diye — confuse nahi honge
+        return 'ABCDEFGHJKLMNPQRSTUVWXYZ';
       case 'small':
-        return 'abcdefghijklmnopqrstuvwxyz';
+        // 1, l hata diye
+        return 'abcdefghijkmnpqrstuvwxyz';
       case 'mix':
-        return 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        // 0, O, 1, l, I hata diye
+        return 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
       case 'number':
-        return '0123456789';
+        // 0, 1 hata diye
+        return '23456789';
       default:
-        return 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        return 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
     }
   }
 
@@ -259,6 +269,8 @@ document.pageSettings.margins.all = 0;
       }
     } catch (_) {}
 
-    return Directory('/storage/emulated/0/Download/CampManager');
+    // iOS ya fallback ke liye app documents directory
+    final appDir = await getApplicationDocumentsDirectory();
+    return Directory('${appDir.path}/CampManager');
   }
 }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -33,11 +34,19 @@ class _PasswordManagerScreenState
   bool _selectionMode = false;
   List<String> _selectedUsers = [];
   String _loadingStatus = 'Loading...';
+  Timer? _searchDebounce;
+  void Function(void Function())? _dialogSetState;
 
   @override
   void initState() {
     super.initState();
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    super.dispose();
   }
 
   Future<void> _savePasswordsLocally() async {
@@ -83,10 +92,6 @@ _allPasswords = List.from(_cachedPasswords);
     // local load first
     await _loadPasswordsLocally();
 
-    if (_allPasswords.isNotEmpty) {
-      _applyFilters();
-    }
-
     try {
       try {
         _profiles = await MikroTikService.getProfiles();
@@ -106,48 +111,34 @@ _allPasswords = List.from(_cachedPasswords);
             .toList();
 
         _allPasswords = fresh;
-for (var p in _allPasswords) {
-  p['campName'] = widget.campName; // add campName manually
-}
+        for (var p in _allPasswords) {
+          p['campName'] = widget.campName;
+        }
 
-        // ⭐ Only remove deleted users when online
-if (!_isOffline) {
-  _allPasswords.removeWhere(
-      (user) => deleted.any((d) => d['name'] == user['name']));
-}
-
+        if (!_isOffline) {
+          _allPasswords.removeWhere(
+              (user) => deleted.any((d) => d['name'] == user['name']));
+        }
 
         _cachedPasswords = List.from(_allPasswords);
         await _savePasswordsLocally();
-        _applyFilters();
         _isOffline = false;
       } else {
         if (_cachedPasswords.isNotEmpty) {
           _allPasswords = List.from(_cachedPasswords);
-          _applyFilters();
           _isOffline = true;
         }
       }
     } catch (e) {
-  _isOffline = true;
+      _isOffline = true;
+      if (_cachedPasswords.isNotEmpty) {
+        _allPasswords = List.from(_cachedPasswords);
+      }
+    }
 
-  // ⭐ Always show cached data if available
-  if (_cachedPasswords.isNotEmpty) {
-    _allPasswords = List.from(_cachedPasswords);
     _applyFilters();
-  } else {
-    // ⭐ Do NOT clear lists — keep old data
-    // _allPasswords = [];
-    // _filteredPasswords = [];
-  }
-
-  setState(() {
-    _isLoading = false;
-  });
-  return;
-}
-
-
+    
+    if (!mounted) return;
     setState(() {
       _isLoading = false;
     });
@@ -190,7 +181,42 @@ if (!_isOffline) {
       ),
     );
   }
+  void _showLoadingDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          _dialogSetState = setDialogState;
+          return AlertDialog(
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(height: 16),
+                Text(
+                  _loadingStatus,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.indigo,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
 
+  void _updateLoadingStatus(String status) {
+    _loadingStatus = status;
+    if (_dialogSetState != null) {
+      _dialogSetState!(() {});
+    }
+  }
   
   Future<void> _deleteSelectedUsers() async {
     if (_isOffline) {
@@ -232,37 +258,38 @@ if (!_isOffline) {
 
     if (confirm != true) return;
 
-    setState(() => _isLoading = true);
-    
+    // ✅ SHOW LOADING DIALOG
+    _showLoadingDialog();
 
     int deletedCount = 0;
     int failedCount = 0;
 
     for (int i = 0; i < _selectedUsers.length; i++) {
-  final username = _selectedUsers[i];
+      final username = _selectedUsers[i];
+      final success = await MikroTikService.deleteHotspotUser(username);
 
-  final success = await MikroTikService.deleteHotspotUser(username);
+      if (success) {
+        _allPasswords.removeWhere((e) => e['name'] == username);
+        _cachedPasswords.removeWhere((e) => e['name'] == username);
+        deletedCount++;
+      } else {
+        failedCount++;
+      }
+      
+      // ✅ LIVE PROGRESS UPDATE
+      _loadingStatus = 'Deleting... ($deletedCount/${_selectedUsers.length})';
+      _updateLoadingStatus(_loadingStatus);
+    }
 
-  if (success) {
-    _allPasswords.removeWhere((e) => e['name'] == username);
-    _cachedPasswords.removeWhere((e) => e['name'] == username);
-    _filteredPasswords.removeWhere((e) => e['name'] == username);
+    // Close loading dialog
+    if (mounted) {
+      Navigator.pop(context);
+    }
 
-    deletedCount++;
-
-    // ⭐ LIVE DELETE COUNTER UPDATE
-    _loadingStatus = 'Deleting... ($deletedCount/${_selectedUsers.length})';
-    setState(() {});
-  } else {
-    failedCount++;
-  }
-}
-
-// ⭐ LOOP KE BAAD CLEAR KARO
-_selectedUsers.clear();
-_selectionMode = false;
-await _savePasswordsLocally();
-
+    _applyFilters();
+    _selectedUsers.clear();
+    _selectionMode = false;
+    await _savePasswordsLocally();
 
     setState(() => _isLoading = false);
 
@@ -372,7 +399,10 @@ await _savePasswordsLocally();
               ),
               onChanged: (value) {
                 _searchQuery = value;
-                _applyFilters();
+                _searchDebounce?.cancel();
+                _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+                  _applyFilters();
+                });
               },
             ),
           ),
@@ -472,6 +502,7 @@ await _savePasswordsLocally();
                             final profile = user['profile'] ?? 'default';
 
                             return Card(
+                              key: ValueKey(username),
                               child: ListTile(
                                 onLongPress: () {
                                   setState(() {

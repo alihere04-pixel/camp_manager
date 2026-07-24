@@ -819,44 +819,24 @@ ScaffoldMessenger.of(context).showSnackBar(
                 final allRooms = box.values.toList();
 
                 // ⭐ CAMP-WISE FILTER
-final campRooms = allRooms.where((room) {
-  return room.campName == widget.selectedCamp['campName'];
-}).toList();
+                final campRooms = allRooms.where((room) {
+                  return room.campName == widget.selectedCamp['campName'];
+                }).toList();
 
-                
                 // ✅ MONTH FILTER APPLY
                 final monthRooms = _filterRoomsByMonth(campRooms);
-                final monthRoomsSorted = [...monthRooms];
-
-monthRoomsSorted.sort((a, b) {
-  final roomA = int.tryParse(a.roomNumber) ?? 0;
-  final roomB = int.tryParse(b.roomNumber) ?? 0;
-  return roomA.compareTo(roomB);
-});
+                
+                // ✅ NATURAL SORT (Numbers + Letters dono theek se sort honge)
+                monthRooms.sort((a, b) {
+                  return _naturalCompare(a.roomNumber, b.roomNumber);
+                });
                 
                 final fullyPaidRooms = monthRooms.where((r) => r.allUsersPaid).toList();
                 final pendingRooms = monthRooms.where((r) => !r.allUsersPaid && r.users.isNotEmpty).toList();
                 
-                final filteredAllRooms = _filterRoomsBySearch(monthRoomsSorted);
-                final fullyPaidRoomsSorted = [...fullyPaidRooms];
-fullyPaidRoomsSorted.sort((a, b) {
-  final roomA = int.tryParse(a.roomNumber) ?? 0;
-  final roomB = int.tryParse(b.roomNumber) ?? 0;
-  return roomA.compareTo(roomB);
-});
-
-final pendingRoomsSorted = [...pendingRooms];
-pendingRoomsSorted.sort((a, b) {
-  final roomA = int.tryParse(a.roomNumber) ?? 0;
-  final roomB = int.tryParse(b.roomNumber) ?? 0;
-  return roomA.compareTo(roomB);
-});
-
-final filteredFullyPaidRooms =
-    _filterRoomsBySearch(fullyPaidRoomsSorted);
-
-final filteredPendingRooms =
-    _filterRoomsBySearch(pendingRoomsSorted);
+                final filteredAllRooms = _filterRoomsBySearch(monthRooms);
+                final filteredFullyPaidRooms = _filterRoomsBySearch(fullyPaidRooms);
+                final filteredPendingRooms = _filterRoomsBySearch(pendingRooms);
                 
                 // ✅ ANIMATED SWITCHER - PAGE CHANGE KA FEEL
                 return AnimatedSwitcher(
@@ -1434,6 +1414,34 @@ void _openMonthlySummary() {
     if (result == true && mounted) {
       setState(() {});
     }
+  }
+  /// Natural sort comparison — "A1", "A2", "A10", "B1" order mein ayenge
+  int _naturalCompare(String a, String b) {
+    final regExp = RegExp(r'(\d+)|(\D+)');
+    final tokensA = regExp.allMatches(a).map((m) => m.group(0)!).toList();
+    final tokensB = regExp.allMatches(b).map((m) => m.group(0)!).toList();
+
+    final minLength = tokensA.length < tokensB.length ? tokensA.length : tokensB.length;
+
+    for (var i = 0; i < minLength; i++) {
+      final tokenA = tokensA[i];
+      final tokenB = tokensB[i];
+
+      final numA = int.tryParse(tokenA);
+      final numB = int.tryParse(tokenB);
+
+      if (numA != null && numB != null) {
+        // Dono numbers hain — numeric compare
+        if (numA != numB) return numA.compareTo(numB);
+      } else {
+        // Koi ek ya dono letters hain — string compare
+        final cmp = tokenA.toLowerCase().compareTo(tokenB.toLowerCase());
+        if (cmp != 0) return cmp;
+      }
+    }
+
+    // Agar sab tokens same hain to length se decide
+    return tokensA.length.compareTo(tokensB.length);
   }
 
   void _navigateToRoomDetail(Room room) async {

@@ -33,6 +33,17 @@ class WhatsAppService {
   }
 
   static Future<Map<String, dynamic>> sendPasswordToUser(User user) async {
+    // ✅ PHONE NUMBER VALIDATION
+    final cleanPhone = user.phoneNumber.replaceAll(RegExp(r'[^0-9]'), '');
+    if (cleanPhone.isEmpty || cleanPhone.length < 10) {
+      return {
+        'success': false,
+        'source': 'none',
+        'message': 'Invalid phone number for ${user.name}: ${user.phoneNumber}',
+        'errorType': 'invalid_phone',
+      };
+    }
+    
     try {
       
       
@@ -143,24 +154,51 @@ class WhatsAppService {
       
       final message = _buildMultiplePasswordsMessage(user, passwords);
       final encodedMessage = Uri.encodeComponent(message);
-      final cleanPhone = user.phoneNumber.replaceAll(RegExp(r'[^0-9]'), '');
+      // cleanPhone upar validate ho chuka hai, wapas clean karne ki zaroorat nahi
       final whatsappUrl = Uri.parse('https://wa.me/$cleanPhone?text=$encodedMessage');
       
-      if (await canLaunchUrl(whatsappUrl)) {
-        await launchUrl(whatsappUrl, mode: LaunchMode.platformDefault);
+      // ✅ BETTER ERROR HANDLING FOR WHATSAPP LAUNCH
+      try {
+        final canLaunch = await canLaunchUrl(whatsappUrl);
+        
+        if (!canLaunch) {
+          return {
+            'success': false,
+            'source': source,
+            'message': 'Cannot open WhatsApp. Please install WhatsApp or check phone number: ${user.phoneNumber}',
+            'errorType': 'whatsapp_not_installed',
+          };
+        }
+        
+        final launched = await launchUrl(
+          whatsappUrl,
+          mode: LaunchMode.platformDefault,
+        );
+        
+        if (!launched) {
+          return {
+            'success': false,
+            'source': source,
+            'message': 'WhatsApp failed to open. Please try again.',
+            'errorType': 'launch_failed',
+          };
+        }
+        
         return {
           'success': true,
           'source': source,
           'passwordsCount': passwords.length,
           'message': '${passwords.length} passwords sent to ${user.name}',
         };
+        
+      } catch (e) {
+        return {
+          'success': false,
+          'source': source,
+          'message': 'WhatsApp error: $e',
+          'errorType': 'exception',
+        };
       }
-      
-      return {
-        'success': false,
-        'source': source,
-        'message': 'Failed to send WhatsApp message',
-      };
     } catch (e) {
       
       return {
